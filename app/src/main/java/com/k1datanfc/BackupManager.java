@@ -64,14 +64,12 @@ public class BackupManager {
     }
 
     private File getLocalBackupDir() {
-        // Android 10+: use app-specific external files dir
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            File extDir = context.getExternalFilesDir(null);
-            return new File(extDir, "K1DataNFC_Backups");
-        } else {
-            return new File(Environment.getExternalStoragePublicDirectory(
-                    Environment.DIRECTORY_DOCUMENTS), "K1DataNFC_Backups");
-        }
+        // Use the root of shared external storage (e.g. /storage/emulated/0/K1DataNFC_Backups)
+        // so the folder is visible directly in the phone's main storage, not buried under
+        // Android/data/<package>. Requires MANAGE_EXTERNAL_STORAGE on Android 11+ or
+        // WRITE_EXTERNAL_STORAGE on Android 10-.
+        File root = Environment.getExternalStorageDirectory();
+        return new File(root, "K1DataNFC_Backups");
     }
 
     public File getLocalBackupDirectory() {
