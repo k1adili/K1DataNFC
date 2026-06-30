@@ -148,4 +148,77 @@ public class EncryptionManager {
             return null;
         }
     }
+
+    // ---------------------------------------------------------------------
+    // PORTABLE (password-based) encryption for backups.
+    //
+    // The Keystore key above never leaves the device, so a ZIP made on one
+    // install can't be opened on another (or after the app is reinstalled).
+    // For backups we instead derive a key from a user-chosen password with
+    // PBKDF2, so the same password can decrypt the backup anywhere.
+    // ---------------------------------------------------------------------
+
+    private static final String PBKDF2_ALGO = "PBKDF2WithHmacSHA256";
+    private static final int PBKDF2_ITERATIONS = 65536;
+    private static final int SALT_LENGTH = 16;
+    private static final int KEY_LENGTH_BITS = 256;
+
+    private SecretKey deriveKeyFromPassword(String password, byte[] salt) throws Exception {
+        javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance(PBKDF2_ALGO);
+        java.security.spec.KeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                password.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS);
+        byte[] keyBytes = factory.generateSecret(spec).getEncoded();
+        return new javax.crypto.spec.SecretKeySpec(keyBytes, "AES");
+    }
+
+    /**
+     * Encrypts data with a key derived from the given password.
+     * Output layout: [salt(16)] [iv(12)] [ciphertext+tag]
+     * The salt is stored alongside the data (this is standard practice —
+     * the salt does not need to be secret, only the password does).
+     */
+    public byte[] encryptWithPassword(byte[] data, String password) {
+        try {
+            byte[] salt = new byte[SALT_LENGTH];
+            new java.security.SecureRandom().nextBytes(salt);
+            SecretKey key = deriveKeyFromPassword(password, salt);
+
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            byte[] iv = cipher.getIV();
+            byte[] ciphertext = cipher.doFinal(data);
+
+            byte[] combined = new byte[SALT_LENGTH + GCM_IV_LENGTH + ciphertext.length];
+            System.arraycopy(salt, 0, combined, 0, SALT_LENGTH);
+            System.arraycopy(iv, 0, combined, SALT_LENGTH, GCM_IV_LENGTH);
+            System.arraycopy(ciphertext, 0, combined, SALT_LENGTH + GCM_IV_LENGTH, ciphertext.length);
+            return combined;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Decrypts data produced by encryptWithPassword(). Returns null if the
+     * password is wrong or the data is corrupted (GCM authentication fails).
+     */
+    public byte[] decryptWithPassword(byte[] encryptedData, String password) {
+        try {
+            byte[] salt = new byte[SALT_LENGTH];
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            byte[] ciphertext = new byte[encryptedData.length - SALT_LENGTH - GCM_IV_LENGTH];
+            System.arraycopy(encryptedData, 0, salt, 0, SALT_LENGTH);
+            System.arraycopy(encryptedData, SALT_LENGTH, iv, 0, GCM_IV_LENGTH);
+            System.arraycopy(encryptedData, SALT_LENGTH + GCM_IV_LENGTH, ciphertext, 0, ciphertext.length);
+
+            SecretKey key = deriveKeyFromPassword(password, salt);
+            Cipher cipher = Cipher.getInstance(TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
+            return cipher.doFinal(ciphertext);
+        } catch (Exception e) {
+            // Wrong password or corrupted data - this is expected, don't log as error
+            return null;
+        }
+    }
 }
