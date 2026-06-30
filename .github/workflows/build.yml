@@ -24,6 +24,21 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Ensure Gradle Wrapper exists
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "gradle-wrapper.jar not found, generating it..."
+            sudo apt-get update -y
+            sudo apt-get install -y unzip wget
+
+            GRADLE_VERSION=8.7
+            wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+            unzip -q gradle-${GRADLE_VERSION}-bin.zip
+            ./gradle-${GRADLE_VERSION}/bin/gradle wrapper --gradle-version ${GRADLE_VERSION}
+          else
+            echo "gradle-wrapper.jar already exists, skipping."
+          fi
+
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
