@@ -109,7 +109,17 @@
                 android:text="+ افزودن تصویر"
                 android:visibility="gone"
                 style="@style/SecondaryButton"
-                android:layout_marginBottom="12dp" />
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tv_image_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="برای تعویض تصویر، روی آن ضربه بزنید"
+                android:textSize="12sp"
+                android:textColor="@color/text_secondary"
+                android:visibility="gone"
+                android:layout_marginBottom="10dp" />
 
             <!-- Images will be dynamically added here -->
             <LinearLayout
