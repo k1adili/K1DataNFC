@@ -29,6 +29,7 @@ public class BackupActivity extends AppCompatActivity {
 
     private static final int REQUEST_STORAGE = 200;
     private static final int REQUEST_PICK_BACKUP = 201;
+    private static final int REQUEST_MANAGE_STORAGE = 202;
 
     private BackupManager backupManager;
     private ProgressBar progressBar;
@@ -66,13 +67,9 @@ public class BackupActivity extends AppCompatActivity {
     }
 
     private void doLocalBackup() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_STORAGE);
-                return;
-            }
+        if (!hasStoragePermission()) {
+            requestStoragePermission();
+            return;
         }
         showLoading(true);
         backupManager.backupToLocalStorage(new BackupManager.BackupCallback() {
@@ -89,10 +86,50 @@ public class BackupActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     showLoading(false);
                     tvStatus.setText(error);
-                    Toast.makeText(BackupActivity.this, R.string.error_occurred, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(BackupActivity.this, error, Toast.LENGTH_LONG).show();
                 });
             }
         });
+    }
+
+    /**
+     * Checks whether we currently have permission to write to the root of
+     * external storage. Logic differs by Android version:
+     *  - Android 11+ (R): needs the special MANAGE_EXTERNAL_STORAGE "All files access".
+     *  - Android 6-10: needs the runtime WRITE_EXTERNAL_STORAGE permission.
+     *  - Below 6: granted at install time automatically.
+     */
+    private boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return android.os.Environment.isExternalStorageManager();
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    private void requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            new AlertDialog.Builder(this)
+                    .setTitle("دسترسی به حافظه")
+                    .setMessage("برای ذخیره بکاپ در پوشه اصلی حافظه گوشی، لازم است دسترسی \"All files access\" را فعال کنید.")
+                    .setPositiveButton("رفتن به تنظیمات", (d, w) -> {
+                        try {
+                            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                            intent.setData(Uri.parse("package:" + getPackageName()));
+                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                        } catch (Exception e) {
+                            Intent intent = new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+                            startActivityForResult(intent, REQUEST_MANAGE_STORAGE);
+                        }
+                    })
+                    .setNegativeButton(R.string.cancel, null)
+                    .show();
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_STORAGE);
+        }
     }
 
     private void pickBackupFile() {
@@ -105,6 +142,14 @@ public class BackupActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_MANAGE_STORAGE) {
+            if (hasStoragePermission()) {
+                doLocalBackup();
+            } else {
+                Toast.makeText(this, "دسترسی به حافظه داده نشد", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
         if (requestCode == REQUEST_PICK_BACKUP && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri == null) return;
