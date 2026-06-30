@@ -2,14 +2,18 @@ package com.k1datanfc;
 
 import android.Manifest;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -35,6 +39,9 @@ public class BackupActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private TextView tvStatus;
 
+    // Holds the URI the user picked, while we wait for them to type the password
+    private Uri pendingRestoreUri;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -49,30 +56,57 @@ public class BackupActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progress_bar);
         tvStatus = findViewById(R.id.tv_status);
 
-        // Local backup
         Button btnBackupLocal = findViewById(R.id.btn_backup_local);
-        btnBackupLocal.setOnClickListener(v -> doLocalBackup());
+        btnBackupLocal.setOnClickListener(v -> {
+            if (!hasStoragePermission()) {
+                requestStoragePermission();
+                return;
+            }
+            promptForBackupPassword();
+        });
 
-        // Local restore
         Button btnRestoreLocal = findViewById(R.id.btn_restore_local);
         btnRestoreLocal.setOnClickListener(v -> pickBackupFile());
 
-        // Google Drive backup
         Button btnBackupDrive = findViewById(R.id.btn_backup_drive);
         btnBackupDrive.setOnClickListener(v -> showDriveInfo());
 
-        // Dropbox backup
         Button btnBackupDropbox = findViewById(R.id.btn_backup_dropbox);
         btnBackupDropbox.setOnClickListener(v -> showDropboxInfo());
     }
 
-    private void doLocalBackup() {
-        if (!hasStoragePermission()) {
-            requestStoragePermission();
-            return;
-        }
+    // ---------- Backup flow ----------
+
+    private void promptForBackupPassword() {
+        LinearLayout container = passwordDialogLayout();
+        EditText etPass = (EditText) container.getChildAt(0);
+        EditText etPassConfirm = (EditText) container.getChildAt(1);
+        etPassConfirm.setHint("تکرار رمز عبور");
+
+        new AlertDialog.Builder(this)
+                .setTitle("رمز عبور بکاپ")
+                .setMessage("یک رمز عبور برای این بکاپ انتخاب کنید. این رمز برای بازیابی در آینده (حتی روی گوشی دیگر) لازم است. آن را فراموش نکنید.")
+                .setView(container)
+                .setPositiveButton("ذخیره بکاپ", (d, w) -> {
+                    String pass = etPass.getText().toString();
+                    String confirm = etPassConfirm.getText().toString();
+                    if (pass.isEmpty()) {
+                        Toast.makeText(this, "رمز عبور نمی‌تواند خالی باشد", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    if (!pass.equals(confirm)) {
+                        Toast.makeText(this, R.string.pin_mismatch, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    doLocalBackup(pass);
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
+    }
+
+    private void doLocalBackup(String password) {
         showLoading(true);
-        backupManager.backupToLocalStorage(new BackupManager.BackupCallback() {
+        backupManager.backupToLocalStorage(password, new BackupManager.BackupCallback() {
             @Override
             public void onSuccess(String message) {
                 runOnUiThread(() -> {
@@ -92,13 +126,8 @@ public class BackupActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * Checks whether we currently have permission to write to the root of
-     * external storage. Logic differs by Android version:
-     *  - Android 11+ (R): needs the special MANAGE_EXTERNAL_STORAGE "All files access".
-     *  - Android 6-10: needs the runtime WRITE_EXTERNAL_STORAGE permission.
-     *  - Below 6: granted at install time automatically.
-     */
+    // ---------- Permission handling (root storage access) ----------
+
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             return android.os.Environment.isExternalStorageManager();
@@ -132,6 +161,8 @@ public class BackupActivity extends AppCompatActivity {
         }
     }
 
+    // ---------- Restore flow ----------
+
     private void pickBackupFile() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("application/zip");
@@ -142,31 +173,49 @@ public class BackupActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
         if (requestCode == REQUEST_MANAGE_STORAGE) {
             if (hasStoragePermission()) {
-                doLocalBackup();
+                promptForBackupPassword();
             } else {
                 Toast.makeText(this, "دسترسی به حافظه داده نشد", Toast.LENGTH_SHORT).show();
             }
             return;
         }
+
         if (requestCode == REQUEST_PICK_BACKUP && resultCode == RESULT_OK && data != null) {
             Uri uri = data.getData();
             if (uri == null) return;
-            new AlertDialog.Builder(this)
-                    .setTitle("بازیابی")
-                    .setMessage("اطلاعات فعلی با فایل پشتیبان جایگزین می‌شوند. ادامه می‌دهید؟")
-                    .setPositiveButton("بله", (d, w) -> restoreFromUri(uri))
-                    .setNegativeButton("خیر", null)
-                    .show();
+            pendingRestoreUri = uri;
+            promptForRestorePassword();
         }
     }
 
-    private void restoreFromUri(Uri uri) {
+    private void promptForRestorePassword() {
+        LinearLayout container = passwordDialogLayout();
+        EditText etPass = (EditText) container.getChildAt(0);
+        container.removeViewAt(1); // only need one field to restore
+
+        new AlertDialog.Builder(this)
+                .setTitle("بازیابی بکاپ")
+                .setMessage("رمز عبوری که هنگام ساخت این بکاپ وارد کردید را وارد کنید.\n\n⚠️ تمام اطلاعات فعلی برنامه با محتوای این بکاپ جایگزین خواهد شد.")
+                .setView(container)
+                .setPositiveButton("بازیابی", (d, w) -> {
+                    String pass = etPass.getText().toString();
+                    if (pass.isEmpty()) {
+                        Toast.makeText(this, "رمز عبور را وارد کنید", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    restoreFromUri(pendingRestoreUri, pass);
+                })
+                .setNegativeButton(R.string.cancel, (d, w) -> pendingRestoreUri = null)
+                .show();
+    }
+
+    private void restoreFromUri(Uri uri, String password) {
         showLoading(true);
         new Thread(() -> {
             try {
-                // Copy to temp file
                 File tempFile = new File(getCacheDir(), "restore_temp.zip");
                 InputStream is = getContentResolver().openInputStream(uri);
                 FileOutputStream fos = new FileOutputStream(tempFile);
@@ -175,7 +224,7 @@ public class BackupActivity extends AppCompatActivity {
                 while ((len = is.read(buf)) != -1) fos.write(buf, 0, len);
                 fos.close(); is.close();
 
-                backupManager.restoreFromLocalFile(tempFile, new BackupManager.BackupCallback() {
+                backupManager.restoreFromLocalFile(tempFile, password, new BackupManager.BackupCallback() {
                     @Override
                     public void onSuccess(String message) {
                         runOnUiThread(() -> {
@@ -189,7 +238,7 @@ public class BackupActivity extends AppCompatActivity {
                         runOnUiThread(() -> {
                             showLoading(false);
                             tvStatus.setText(error);
-                            Toast.makeText(BackupActivity.this, R.string.error_occurred, Toast.LENGTH_SHORT).show();
+                            Toast.makeText(BackupActivity.this, error, Toast.LENGTH_LONG).show();
                         });
                     }
                 });
@@ -202,6 +251,8 @@ public class BackupActivity extends AppCompatActivity {
         }).start();
     }
 
+    // ---------- Cloud info dialogs ----------
+
     private void showDriveInfo() {
         new AlertDialog.Builder(this)
                 .setTitle("Google Drive")
@@ -212,11 +263,13 @@ public class BackupActivity extends AppCompatActivity {
                         "یا از دکمه زیر برای باز کردن Drive استفاده کنید:")
                 .setPositiveButton("باز کردن Drive", (d, w) -> {
                     try {
-                        startActivity(new Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://drive.google.com")));
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com")));
                     } catch (Exception e) { /* ignore */ }
                 })
-                .setNeutralButton("ذخیره روی گوشی اول", (d, w) -> doLocalBackup())
+                .setNeutralButton("ذخیره روی گوشی اول", (d, w) -> {
+                    if (!hasStoragePermission()) requestStoragePermission();
+                    else promptForBackupPassword();
+                })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
     }
@@ -233,13 +286,35 @@ public class BackupActivity extends AppCompatActivity {
                     try {
                         startActivity(getPackageManager().getLaunchIntentForPackage("com.dropbox.android"));
                     } catch (Exception e) {
-                        startActivity(new Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://dropbox.com")));
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://dropbox.com")));
                     }
                 })
-                .setNeutralButton("ذخیره روی گوشی اول", (d, w) -> doLocalBackup())
+                .setNeutralButton("ذخیره روی گوشی اول", (d, w) -> {
+                    if (!hasStoragePermission()) requestStoragePermission();
+                    else promptForBackupPassword();
+                })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    // ---------- Small UI helpers ----------
+
+    private LinearLayout passwordDialogLayout() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad / 2, pad, 0);
+
+        EditText etPass = new EditText(this);
+        etPass.setHint("رمز عبور");
+        etPass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(etPass);
+
+        EditText etPass2 = new EditText(this);
+        etPass2.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(etPass2);
+
+        return layout;
     }
 
     private void showLoading(boolean show) {
@@ -251,7 +326,7 @@ public class BackupActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_STORAGE && grantResults.length > 0
                 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            doLocalBackup();
+            promptForBackupPassword();
         }
     }
 
