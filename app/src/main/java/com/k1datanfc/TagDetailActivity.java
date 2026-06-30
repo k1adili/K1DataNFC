@@ -105,6 +105,8 @@ public class TagDetailActivity extends AppCompatActivity {
         fabEdit.setText("ذخیره");
         fabEdit.setIcon(ContextCompat.getDrawable(this, android.R.drawable.ic_menu_save));
         findViewById(R.id.btn_add_image).setVisibility(View.VISIBLE);
+        findViewById(R.id.tv_image_hint).setVisibility(View.VISIBLE);
+        updateImageDeleteButtonsVisibility(View.VISIBLE);
     }
 
     private void enterViewMode() {
@@ -114,6 +116,21 @@ public class TagDetailActivity extends AppCompatActivity {
         fabEdit.setText("ویرایش");
         fabEdit.setIcon(ContextCompat.getDrawable(this, android.R.drawable.ic_menu_edit));
         findViewById(R.id.btn_add_image).setVisibility(View.GONE);
+        findViewById(R.id.tv_image_hint).setVisibility(View.GONE);
+        updateImageDeleteButtonsVisibility(View.GONE);
+    }
+
+    /**
+     * Loops over all currently-displayed image cards and shows/hides their
+     * delete button. Needed because addImageView() sets visibility once at
+     * creation time, but entering/leaving edit mode happens afterwards.
+     */
+    private void updateImageDeleteButtonsVisibility(int visibility) {
+        for (int i = 0; i < imagesContainer.getChildCount(); i++) {
+            View child = imagesContainer.getChildAt(i);
+            ImageButton btnDelete = child.findViewById(R.id.btn_delete_image);
+            if (btnDelete != null) btnDelete.setVisibility(visibility);
+        }
     }
 
     private void populateFields() {
@@ -131,6 +148,9 @@ public class TagDetailActivity extends AppCompatActivity {
         }
     }
 
+    // Path of the image currently being replaced (null = adding a new image)
+    private String replacingImagePath = null;
+
     private void addImageView(String path) {
         View imgView = getLayoutInflater().inflate(R.layout.item_image, imagesContainer, false);
         android.widget.ImageView iv = imgView.findViewById(R.id.image_view);
@@ -144,11 +164,24 @@ public class TagDetailActivity extends AppCompatActivity {
             }
         }).start();
 
+        // Tap image while editing -> replace it with a newly picked photo
+        iv.setOnClickListener(v -> {
+            if (!isEditing) return;
+            replacingImagePath = path;
+            openImagePicker();
+        });
+
         btnDelete.setOnClickListener(v -> {
             if (!isEditing) return;
-            dbManager.deleteImageFile(path);
-            currentTag.removeImagePath(path);
-            imagesContainer.removeView(imgView);
+            new AlertDialog.Builder(this)
+                    .setMessage("این تصویر حذف شود؟")
+                    .setPositiveButton(R.string.yes, (d, w) -> {
+                        dbManager.deleteImageFile(path);
+                        currentTag.removeImagePath(path);
+                        imagesContainer.removeView(imgView);
+                    })
+                    .setNegativeButton(R.string.no, null)
+                    .show();
         });
         btnDelete.setVisibility(isEditing ? View.VISIBLE : View.GONE);
         imagesContainer.addView(imgView);
@@ -201,7 +234,9 @@ public class TagDetailActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_PICK_IMAGE && resultCode == RESULT_OK && data != null) {
             Uri imageUri = data.getData();
-            if (imageUri == null) return;
+            if (imageUri == null) { replacingImagePath = null; return; }
+            final String oldPath = replacingImagePath;
+            replacingImagePath = null;
             new Thread(() -> {
                 try {
                     InputStream is = getContentResolver().openInputStream(imageUri);
@@ -213,13 +248,23 @@ public class TagDetailActivity extends AppCompatActivity {
                     byte[] compressed = baos.toByteArray();
                     String savedPath = dbManager.saveEncryptedImage(compressed, currentTag.getTagId());
                     if (savedPath != null) {
-                        currentTag.addImagePath(savedPath);
-                        runOnUiThread(() -> addImageView(savedPath));
+                        if (oldPath != null) {
+                            // Replacing an existing image: remove the old one and refresh the list
+                            dbManager.deleteImageFile(oldPath);
+                            currentTag.removeImagePath(oldPath);
+                            currentTag.addImagePath(savedPath);
+                            runOnUiThread(this::loadImages);
+                        } else {
+                            currentTag.addImagePath(savedPath);
+                            runOnUiThread(() -> addImageView(savedPath));
+                        }
                     }
                 } catch (IOException e) {
                     runOnUiThread(() -> Toast.makeText(this, "خطا در بارگذاری تصویر", Toast.LENGTH_SHORT).show());
                 }
             }).start();
+        } else if (requestCode == REQUEST_PICK_IMAGE) {
+            replacingImagePath = null;
         }
     }
 
