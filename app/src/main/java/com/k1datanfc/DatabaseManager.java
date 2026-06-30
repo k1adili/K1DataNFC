@@ -39,7 +39,15 @@ public class DatabaseManager {
 
     // ---------- CRUD ----------
 
+    /** True if the last loadAllTags() call failed to decrypt an existing, non-empty database file. */
+    private boolean lastLoadFailed = false;
+
+    public boolean didLastLoadFail() {
+        return lastLoadFailed;
+    }
+
     public List<NfcTag> loadAllTags() {
+        lastLoadFailed = false;
         List<NfcTag> tags = new ArrayList<>();
         File dbFile = new File(context.getFilesDir(), DB_FILE);
         if (!dbFile.exists()) return tags;
@@ -48,8 +56,16 @@ public class DatabaseManager {
             byte[] encData = new byte[(int) dbFile.length()];
             fis.read(encData);
             fis.close();
+            if (encData.length == 0) return tags;
             byte[] jsonBytes = encryption.decryptBytes(encData);
-            if (jsonBytes == null) return tags;
+            if (jsonBytes == null) {
+                // Decryption failed — almost always means the encryption key changed
+                // (app reinstalled / data cleared / restored on a different device)
+                // and the backup file can no longer be read with the current key.
+                Log.e(TAG, "Decryption returned null - encryption key mismatch or corrupted file");
+                lastLoadFailed = true;
+                return tags;
+            }
             String json = new String(jsonBytes, StandardCharsets.UTF_8);
             JSONArray arr = new JSONArray(json);
             for (int i = 0; i < arr.length(); i++) {
@@ -57,6 +73,7 @@ public class DatabaseManager {
             }
         } catch (Exception e) {
             Log.e(TAG, "Error loading tags", e);
+            lastLoadFailed = true;
         }
         return tags;
     }
