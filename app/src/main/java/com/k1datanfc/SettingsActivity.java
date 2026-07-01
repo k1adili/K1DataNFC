@@ -28,10 +28,10 @@ public class SettingsActivity extends AppCompatActivity {
 
         // App version
         TextView tvVersion = findViewById(R.id.tv_version);
-        try {
-            String versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-            tvVersion.setText("نسخه " + versionName);
-        } catch (Exception e) { tvVersion.setText(R.string.version); }
+        tvVersion.setText("نسخه 1.3");
+
+        TextView tvDeveloper = findViewById(R.id.tv_developer);
+        tvDeveloper.setText("سازنده اپ: کیوان عدیلی");
 
         // PIN setup
         EditText etPin = findViewById(R.id.et_pin);
