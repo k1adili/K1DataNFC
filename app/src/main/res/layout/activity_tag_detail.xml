@@ -139,7 +139,7 @@
         android:layout_margin="16dp"
         android:text="ویرایش"
         app:backgroundTint="@color/primary"
-        android:textColor="@color/white"
-        app:tint="@color/white" />
+        android:textColor="@color/black"
+        app:tint="@color/black" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
