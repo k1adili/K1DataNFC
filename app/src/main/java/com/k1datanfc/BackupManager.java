@@ -205,6 +205,37 @@ public class BackupManager {
             writeFile(new File(imagesDir, imgEntry.getKey()), reEncrypted);
         }
 
+        // FIX: The database JSON stores absolute paths to image files.
+        // After restore the absolute path prefix may differ (different device,
+        // different user-id, different install). Rewrite every imagePath in the
+        // JSON so it points to the correct location on THIS device.
+        if (decryptedDb != null && !decryptedImages.isEmpty()) {
+            try {
+                String oldJson = new String(decryptedDb, java.nio.charset.StandardCharsets.UTF_8);
+                String newImagesDirPath = imagesDir.getAbsolutePath();
+                org.json.JSONArray arr = new org.json.JSONArray(oldJson);
+                for (int i = 0; i < arr.length(); i++) {
+                    org.json.JSONObject tag = arr.getJSONObject(i);
+                    org.json.JSONArray paths = tag.optJSONArray("imagePaths");
+                    if (paths == null) continue;
+                    org.json.JSONArray fixedPaths = new org.json.JSONArray();
+                    for (int j = 0; j < paths.length(); j++) {
+                        String oldPath = paths.getString(j);
+                        // Keep only the filename, build path relative to THIS device's images dir
+                        String filename = new File(oldPath).getName();
+                        fixedPaths.put(new File(newImagesDirPath, filename).getAbsolutePath());
+                    }
+                    tag.put("imagePaths", fixedPaths);
+                }
+                // Overwrite the database with the corrected paths
+                byte[] fixedJson = arr.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                byte[] reEncryptedDb = encryptionManager.encryptBytes(fixedJson);
+                writeFile(dbManager.getDatabaseFile(), reEncryptedDb);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to rewrite image paths after restore", e);
+            }
+        }
+
         return tagCount;
     }
 
