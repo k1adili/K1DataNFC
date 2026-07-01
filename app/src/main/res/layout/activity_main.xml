@@ -90,8 +90,8 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:src="@android:drawable/ic_menu_add"
-        app:backgroundTint="@color/accent"
-        app:tint="@color/white"
+        app:backgroundTint="@color/primary"
+        app:tint="@color/black"
         android:contentDescription="اسکن تگ" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
