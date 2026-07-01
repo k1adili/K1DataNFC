@@ -1,20 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#1A237E</color>
-    <color name="primary_dark">#000051</color>
-    <color name="primary_light">#534BAE</color>
-    <color name="accent">#00BCD4</color>
-    <color name="accent_dark">#0097A7</color>
+    <!-- Caterpillar brand palette -->
+    <!-- Primary: CAT Yellow-Orange -->
+    <color name="primary">#F2A61D</color>
+    <!-- Darker shade for status bar / pressed states -->
+    <color name="primary_dark">#C47F00</color>
+    <!-- Lighter tint for highlights -->
+    <color name="primary_light">#FFD166</color>
+    <!-- Accent: deep CAT black-charcoal -->
+    <color name="accent">#1A1A1A</color>
+    <color name="accent_dark">#000000</color>
+
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
-    <color name="background">#F5F5F5</color>
+
+    <!-- Backgrounds -->
+    <color name="background">#FFF8EE</color>
     <color name="card_background">#FFFFFF</color>
-    <color name="text_primary">#212121</color>
-    <color name="text_secondary">#757575</color>
-    <color name="divider">#BDBDBD</color>
+    <color name="nfc_scan_bg">#FFF0CC</color>
+
+    <!-- Text -->
+    <color name="text_primary">#1A1A1A</color>
+    <color name="text_secondary">#6B5B2E</color>
+    <color name="divider">#E8D5A3</color>
+
+    <!-- Status colors -->
     <color name="success">#4CAF50</color>
-    <color name="error">#F44336</color>
-    <color name="warning">#FFC107</color>
-    <color name="nfc_scan_bg">#E8EAF6</color>
-    <color name="ripple">#1A1A237E</color>
+    <color name="error">#D32F2F</color>
+    <color name="warning">#F57C00</color>
+
+    <!-- Ripple / overlay -->
+    <color name="ripple">#33F2A61D</color>
+
+    <!-- Info card background (blue-tinted) — replaced with warm amber -->
+    <color name="info_bg">#FFF3DC</color>
+    <color name="info_text">#7A5500</color>
 </resources>
