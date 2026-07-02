@@ -4,38 +4,53 @@ import android.content.Context;
 import android.os.Environment;
 import android.util.Log;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Handles local, Dropbox and Google Drive backup/restore.
+ * Backup/restore manager.
  *
- * IMPORTANT: the app's normal on-disk encryption uses a key stored in the
- * Android Keystore, which is tied to this specific app install on this
- * specific device and is NEVER exported. That's correct for local storage,
- * but it means a raw copy of those files is useless after a reinstall or on
- * another device — there is no key available to decrypt it with.
+ * HOW IT WORKS
+ * ─────────────
+ * On-disk files are encrypted with a key that lives in Android Keystore and
+ * never leaves the device. That key is lost if the app is reinstalled or the
+ * backup is opened on a different phone.
  *
- * For backups we instead re-encrypt everything with a key derived from a
- * user-chosen password (PBKDF2 + AES-256-GCM). As long as the user remembers
- * that password, the backup can be restored on any device, at any time,
- * even after the original Keystore key is gone.
+ * For portable backups we:
+ *   1. Decrypt each file with the local Keystore key (plain bytes in RAM).
+ *   2. Re-encrypt those plain bytes with a user password (PBKDF2+AES-GCM).
+ *   3. Write the password-encrypted bytes into the ZIP.
+ *
+ * Restore reverses this: password-decrypt from ZIP → re-encrypt with the NEW
+ * device's Keystore key → write to internal storage.
+ *
+ * Image paths in the JSON database are ABSOLUTE paths tied to the original
+ * device. After restore we rewrite them to match the new device's path.
  */
 public class BackupManager {
 
     private static final String TAG = "BackupManager";
-    private static final String ZIP_ENTRY_DB = "k1_tags.dat";
-    private static final String ZIP_ENTRY_IMAGES_PREFIX = "images/";
 
-    private final Context context;
+    // ZIP entry names
+    private static final String ENTRY_DB     = "db/k1_tags.dat";
+    private static final String ENTRY_IMG_PFX = "images/";
+
+    private final Context        context;
     private final DatabaseManager dbManager;
-    private final EncryptionManager encryptionManager;
+    private final EncryptionManager enc;
 
     public interface BackupCallback {
         void onSuccess(String message);
@@ -43,247 +58,259 @@ public class BackupManager {
     }
 
     public BackupManager(Context context, DatabaseManager dbManager) {
-        this.context = context.getApplicationContext();
+        this.context   = context.getApplicationContext();
         this.dbManager = dbManager;
-        this.encryptionManager = K1Application.getInstance().getEncryptionManager();
+        this.enc       = K1Application.getInstance().getEncryptionManager();
     }
 
-    // -------- Local Backup --------
+    // ─────────────────────────────── LOCAL BACKUP ────────────────────────────
 
-    public void backupToLocalStorage(String password, BackupCallback callback) {
+    public void backupToLocalStorage(String password, BackupCallback cb) {
         new Thread(() -> {
             try {
-                File backupDir = getLocalBackupDir();
-                if (!backupDir.exists() && !backupDir.mkdirs()) {
-                    callback.onError("امکان ایجاد پوشه بکاپ وجود ندارد:\n" + backupDir.getAbsolutePath());
+                File dir = getBackupDir();
+                if (!dir.exists() && !dir.mkdirs()) {
+                    cb.onError("نمی‌توان پوشه بکاپ را ایجاد کرد:\n" + dir.getAbsolutePath());
                     return;
                 }
-                String filename = dbManager.generateBackupFilename();
-                File zipFile = new File(backupDir, filename);
-                createBackupZip(zipFile, password);
-                callback.onSuccess("پشتیبان ذخیره شد:\n" + zipFile.getAbsolutePath());
+                File zip = new File(dir, dbManager.generateBackupFilename());
+                createBackupZip(zip, password);
+                cb.onSuccess("بکاپ ذخیره شد:\n" + zip.getAbsolutePath());
             } catch (Exception e) {
-                Log.e(TAG, "Local backup failed", e);
-                callback.onError("خطا در پشتیبان‌گیری: " + e.getMessage());
+                Log.e(TAG, "backup failed", e);
+                cb.onError("خطا در بکاپ: " + e.getMessage());
             }
         }).start();
     }
 
-    public void restoreFromLocalFile(File zipFile, String password, BackupCallback callback) {
+    public void restoreFromLocalFile(File zipFile, String password, BackupCallback cb) {
         new Thread(() -> {
             try {
-                int restoredTags = restoreFromZip(zipFile, password);
-                if (restoredTags < 0) {
-                    callback.onError("رمز عبور اشتباه است یا فایل بکاپ خراب است.");
-                    return;
+                int n = restoreFromZip(zipFile, password);
+                if (n < 0) {
+                    cb.onError("رمز عبور اشتباه است یا فایل بکاپ خراب است.");
+                } else {
+                    cb.onSuccess("بازیابی انجام شد — " + n + " تگ بازگردانده شد.");
                 }
-                callback.onSuccess("بازیابی با موفقیت انجام شد (" + restoredTags + " تگ بازیابی شد)");
             } catch (Exception e) {
-                Log.e(TAG, "Local restore failed", e);
-                callback.onError("خطا در بازیابی: " + e.getMessage());
+                Log.e(TAG, "restore failed", e);
+                cb.onError("خطا در بازیابی: " + e.getMessage());
             }
         }).start();
     }
 
-    private File getLocalBackupDir() {
-        // Root of shared external storage (e.g. /storage/emulated/0/K1DataNFC_Backups)
-        // so the folder is visible directly in the phone's main storage, not buried
-        // under Android/data/<package>. Requires MANAGE_EXTERNAL_STORAGE on Android 11+.
-        File root = Environment.getExternalStorageDirectory();
-        return new File(root, "K1DataNFC_Backups");
+    private File getBackupDir() {
+        return new File(Environment.getExternalStorageDirectory(), "K1DataNFC_Backups");
     }
 
-    public File getLocalBackupDirectory() {
-        return getLocalBackupDir();
-    }
+    public File getLocalBackupDirectory() { return getBackupDir(); }
 
-    // -------- ZIP helpers --------
+    // ─────────────────────────────── CREATE ZIP ───────────────────────────────
 
     /**
-     * Builds a backup ZIP. Every entry is decrypted from on-disk storage
-     * (using the device Keystore key) and then RE-encrypted with the
-     * user's password before being written into the ZIP. This makes the
-     * ZIP fully portable and independent of the device/install.
+     * Builds a portable backup ZIP.
+     *
+     * ZIP layout:
+     *   db/k1_tags.dat          ← password-encrypted JSON database
+     *   images/<filename>.enc   ← password-encrypted image (one per image)
+     *
+     * Each file is independently decrypted from disk (Keystore key) and
+     * then re-encrypted with the user password before entering the ZIP.
      */
-    public void createBackupZip(File zipFile, String password) throws IOException {
+    public void createBackupZip(File zipFile, String password) throws Exception {
+        File dbFile    = dbManager.getDatabaseFile();
+        File imagesDir = dbManager.getImagesDir();
+
+        Log.d(TAG, "createBackupZip → db=" + dbFile.getAbsolutePath()
+                + " exists=" + dbFile.exists());
+        Log.d(TAG, "createBackupZip → imagesDir=" + imagesDir.getAbsolutePath()
+                + " exists=" + imagesDir.exists());
+
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
 
-            // Database: decrypt with device key, re-encrypt with password
-            File dbFile = dbManager.getDatabaseFile();
-            if (dbFile.exists()) {
-                byte[] encryptedOnDisk = readFile(dbFile);
-                byte[] plainJson = encryptionManager.decryptBytes(encryptedOnDisk);
-                if (plainJson == null) {
-                    throw new IOException("امکان خواندن دیتابیس داخلی وجود ندارد (کلید رمزنگاری نامعتبر است)");
-                }
-                byte[] portableEncrypted = encryptionManager.encryptWithPassword(plainJson, password);
-                writeZipEntry(zos, ZIP_ENTRY_DB, portableEncrypted);
+            // ── 1. Database ──────────────────────────────────────────────────
+            if (!dbFile.exists()) {
+                throw new IOException("دیتابیس پیدا نشد — هیچ داده‌ای برای بکاپ وجود ندارد.");
             }
+            byte[] rawDb    = readFile(dbFile);
+            byte[] plainDb  = enc.decryptBytes(rawDb);
+            if (plainDb == null) throw new IOException("رمزگشایی دیتابیس شکست خورد.");
+            putEntry(zos, ENTRY_DB, enc.encryptWithPassword(plainDb, password));
+            Log.d(TAG, "DB entry written (" + plainDb.length + " bytes plain)");
 
-            // Images: same treatment, one by one
-            File imagesDir = dbManager.getImagesDir();
+            // ── 2. Images ────────────────────────────────────────────────────
             if (imagesDir.exists()) {
-                File[] imgs = imagesDir.listFiles();
-                if (imgs != null) {
-                    for (File img : imgs) {
-                        byte[] encryptedOnDisk = readFile(img);
-                        byte[] plainImage = encryptionManager.decryptBytes(encryptedOnDisk);
-                        if (plainImage == null) {
-                            Log.e(TAG, "Skipping unreadable image during backup: " + img.getName());
+                File[] files = imagesDir.listFiles();
+                int imgCount = 0;
+                if (files != null) {
+                    for (File img : files) {
+                        if (!img.isFile()) continue;
+                        byte[] rawImg   = readFile(img);
+                        byte[] plainImg = enc.decryptBytes(rawImg);
+                        if (plainImg == null) {
+                            Log.w(TAG, "skipping unreadable image: " + img.getName());
                             continue;
                         }
-                        byte[] portableEncrypted = encryptionManager.encryptWithPassword(plainImage, password);
-                        writeZipEntry(zos, ZIP_ENTRY_IMAGES_PREFIX + img.getName(), portableEncrypted);
+                        putEntry(zos, ENTRY_IMG_PFX + img.getName(),
+                                 enc.encryptWithPassword(plainImg, password));
+                        imgCount++;
+                        Log.d(TAG, "image entry written: " + img.getName());
                     }
                 }
+                Log.d(TAG, imgCount + " image(s) added to ZIP");
+            } else {
+                Log.d(TAG, "imagesDir does not exist, no images to back up");
             }
         }
     }
 
+    // ─────────────────────────────── RESTORE ZIP ──────────────────────────────
+
     /**
-     * Restores from a backup ZIP created by createBackupZip(). Each entry is
-     * decrypted with the password, then re-encrypted with this device's
-     * current Keystore key before being written to internal storage —
-     * exactly mirroring how data is normally saved.
+     * Restores from a ZIP produced by createBackupZip().
      *
-     * Existing local data is cleared first so the result matches the backup
-     * exactly (no leftover tags/images from before the restore).
+     * Steps:
+     *   1. Password-decrypt EVERY entry into RAM (first pass).
+     *      If even one entry fails → return -1 (wrong password / corrupt).
+     *   2. Delete all current local data.
+     *   3. Write images (re-encrypt with Keystore key).
+     *   4. Rewrite absolute image paths in the JSON so they match THIS device.
+     *   5. Write the database (re-encrypt with Keystore key).
      *
-     * @return number of tag entries restored, or -1 if the password was wrong.
+     * Returns the number of tags restored, or -1 on password failure.
      */
-    public int restoreFromZip(File zipFile, String password) throws IOException {
-        // First pass: decrypt every entry into memory. If the password is
-        // wrong, the very first entry will fail to decrypt and we bail out
-        // WITHOUT touching any existing local data.
-        byte[] decryptedDb = null;
-        java.util.Map<String, byte[]> decryptedImages = new java.util.HashMap<>();
+    public int restoreFromZip(File zipFile, String password) throws Exception {
+
+        // ── Pass 1: decrypt everything into memory ───────────────────────────
+        byte[]              plainDb     = null;
+        Map<String, byte[]> plainImages = new HashMap<>();
 
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
             ZipEntry entry;
-            boolean sawAnyEntry = false;
+            int entriesRead = 0;
             while ((entry = zis.getNextEntry()) != null) {
-                sawAnyEntry = true;
-                String name = entry.getName();
-                byte[] portableEncrypted = readAllBytes(zis);
-                byte[] plain = encryptionManager.decryptWithPassword(portableEncrypted, password);
+                entriesRead++;
+                String name      = entry.getName();
+                byte[] encrypted = readAllBytes(zis);
+                byte[] plain     = enc.decryptWithPassword(encrypted, password);
                 if (plain == null) {
-                    // Wrong password (or corrupted backup)
-                    return -1;
+                    Log.e(TAG, "decryptWithPassword returned null for entry: " + name);
+                    return -1;   // wrong password or corrupt data
                 }
-                if (name.equals(ZIP_ENTRY_DB)) {
-                    decryptedDb = plain;
-                } else if (name.startsWith(ZIP_ENTRY_IMAGES_PREFIX)) {
-                    String imageName = name.substring(ZIP_ENTRY_IMAGES_PREFIX.length());
-                    decryptedImages.put(imageName, plain);
+                if (name.equals(ENTRY_DB)) {
+                    plainDb = plain;
+                    Log.d(TAG, "DB entry decrypted (" + plain.length + " bytes)");
+                } else if (name.startsWith(ENTRY_IMG_PFX)) {
+                    String filename = name.substring(ENTRY_IMG_PFX.length());
+                    if (!filename.isEmpty()) {
+                        plainImages.put(filename, plain);
+                        Log.d(TAG, "image entry decrypted: " + filename);
+                    }
                 }
                 zis.closeEntry();
             }
-            if (!sawAnyEntry) {
-                return -1; // empty/invalid zip
-            }
+            if (entriesRead == 0) return -1;   // empty ZIP
         }
 
-        // Second pass: now that we know the password is correct, clear
-        // existing local data and write the restored data in its place.
+        Log.d(TAG, "Restore pass 1 done — db=" + (plainDb != null)
+                + " images=" + plainImages.size());
+
+        // ── Pass 2: clear old data, write new data ───────────────────────────
         clearLocalData();
 
-        int tagCount = 0;
-        if (decryptedDb != null) {
-            byte[] reEncrypted = encryptionManager.encryptBytes(decryptedDb);
-            writeFile(dbManager.getDatabaseFile(), reEncrypted);
-            // Count tags for the success message
-            try {
-                String json = new String(decryptedDb, java.nio.charset.StandardCharsets.UTF_8);
-                tagCount = new org.json.JSONArray(json).length();
-            } catch (Exception ignored) { }
-        }
-
+        // Write images first so we know the final paths before touching the DB
         File imagesDir = dbManager.getImagesDir();
         if (!imagesDir.exists()) imagesDir.mkdirs();
-        for (java.util.Map.Entry<String, byte[]> imgEntry : decryptedImages.entrySet()) {
-            byte[] reEncrypted = encryptionManager.encryptBytes(imgEntry.getValue());
-            writeFile(new File(imagesDir, imgEntry.getKey()), reEncrypted);
+
+        for (Map.Entry<String, byte[]> e : plainImages.entrySet()) {
+            File dest = new File(imagesDir, e.getKey());
+            writeFile(dest, enc.encryptBytes(e.getValue()));
+            Log.d(TAG, "image written: " + dest.getAbsolutePath());
         }
 
-        // FIX: The database JSON stores absolute paths to image files.
-        // After restore the absolute path prefix may differ (different device,
-        // different user-id, different install). Rewrite every imagePath in the
-        // JSON so it points to the correct location on THIS device.
-        if (decryptedDb != null && !decryptedImages.isEmpty()) {
+        // Fix absolute paths in the JSON and write the database
+        int tagCount = 0;
+        if (plainDb != null) {
+            byte[] fixedJson = fixImagePaths(plainDb, imagesDir.getAbsolutePath());
+            writeFile(dbManager.getDatabaseFile(), enc.encryptBytes(fixedJson));
             try {
-                String oldJson = new String(decryptedDb, java.nio.charset.StandardCharsets.UTF_8);
-                String newImagesDirPath = imagesDir.getAbsolutePath();
-                org.json.JSONArray arr = new org.json.JSONArray(oldJson);
-                for (int i = 0; i < arr.length(); i++) {
-                    org.json.JSONObject tag = arr.getJSONObject(i);
-                    org.json.JSONArray paths = tag.optJSONArray("imagePaths");
-                    if (paths == null) continue;
-                    org.json.JSONArray fixedPaths = new org.json.JSONArray();
-                    for (int j = 0; j < paths.length(); j++) {
-                        String oldPath = paths.getString(j);
-                        // Keep only the filename, build path relative to THIS device's images dir
-                        String filename = new File(oldPath).getName();
-                        fixedPaths.put(new File(newImagesDirPath, filename).getAbsolutePath());
-                    }
-                    tag.put("imagePaths", fixedPaths);
-                }
-                // Overwrite the database with the corrected paths
-                byte[] fixedJson = arr.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                byte[] reEncryptedDb = encryptionManager.encryptBytes(fixedJson);
-                writeFile(dbManager.getDatabaseFile(), reEncryptedDb);
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to rewrite image paths after restore", e);
-            }
+                tagCount = new JSONArray(new String(fixedJson, StandardCharsets.UTF_8)).length();
+            } catch (Exception ignore) {}
+            Log.d(TAG, "DB written with " + tagCount + " tag(s)");
         }
 
         return tagCount;
     }
 
     /**
-     * Deletes the current database file and all images before a restore,
-     * so old data can never mix with or block the restored data.
+     * Rewrites every imagePath in the JSON so the filename part stays the same
+     * but the directory prefix is replaced with newImagesDirPath.
+     *
+     * Example:
+     *   old: /data/user/0/com.k1datanfc/files/images/AABB_123.enc
+     *   new: /data/user/10/com.k1datanfc/files/images/AABB_123.enc
      */
-    private void clearLocalData() {
-        File dbFile = dbManager.getDatabaseFile();
-        if (dbFile.exists()) dbFile.delete();
-
-        File imagesDir = dbManager.getImagesDir();
-        if (imagesDir.exists()) {
-            File[] imgs = imagesDir.listFiles();
-            if (imgs != null) {
-                for (File img : imgs) img.delete();
+    private byte[] fixImagePaths(byte[] jsonBytes, String newImagesDirPath) {
+        try {
+            String   json = new String(jsonBytes, StandardCharsets.UTF_8);
+            JSONArray arr  = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject tag   = arr.getJSONObject(i);
+                JSONArray  paths = tag.optJSONArray("imagePaths");
+                if (paths == null) continue;
+                JSONArray fixed = new JSONArray();
+                for (int j = 0; j < paths.length(); j++) {
+                    String oldPath  = paths.getString(j);
+                    String filename = new File(oldPath).getName();
+                    fixed.put(new File(newImagesDirPath, filename).getAbsolutePath());
+                }
+                tag.put("imagePaths", fixed);
             }
+            return arr.toString().getBytes(StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            Log.e(TAG, "fixImagePaths failed — returning original JSON", e);
+            return jsonBytes;
         }
     }
 
-    // -------- low-level file/zip helpers --------
+    // ─────────────────────────────── HELPERS ─────────────────────────────────
 
-    private void writeZipEntry(ZipOutputStream zos, String entryName, byte[] data) throws IOException {
-        ZipEntry entry = new ZipEntry(entryName);
-        zos.putNextEntry(entry);
+    private void clearLocalData() {
+        File db = dbManager.getDatabaseFile();
+        if (db.exists()) db.delete();
+
+        File imgDir = dbManager.getImagesDir();
+        if (imgDir.exists()) {
+            File[] fs = imgDir.listFiles();
+            if (fs != null) for (File f : fs) f.delete();
+        }
+    }
+
+    private void putEntry(ZipOutputStream zos, String name, byte[] data) throws IOException {
+        zos.putNextEntry(new ZipEntry(name));
         zos.write(data);
         zos.closeEntry();
     }
 
-    private byte[] readFile(File file) throws IOException {
-        try (FileInputStream fis = new FileInputStream(file)) {
+    private byte[] readFile(File f) throws IOException {
+        try (FileInputStream fis = new FileInputStream(f)) {
             return readAllBytes(fis);
         }
     }
 
-    private void writeFile(File file, byte[] data) throws IOException {
-        File parent = file.getParentFile();
+    private void writeFile(File f, byte[] data) throws IOException {
+        File parent = f.getParentFile();
         if (parent != null && !parent.exists()) parent.mkdirs();
-        try (FileOutputStream fos = new FileOutputStream(file)) {
+        try (FileOutputStream fos = new FileOutputStream(f)) {
             fos.write(data);
         }
     }
 
-    private byte[] readAllBytes(java.io.InputStream is) throws IOException {
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+    private byte[] readAllBytes(InputStream is) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
         byte[] chunk = new byte[8192];
         int len;
-        while ((len = is.read(chunk)) != -1) buffer.write(chunk, 0, len);
-        return buffer.toByteArray();
+        while ((len = is.read(chunk)) != -1) buf.write(chunk, 0, len);
+        return buf.toByteArray();
     }
 }
