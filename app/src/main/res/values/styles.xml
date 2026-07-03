@@ -6,6 +6,9 @@
         <item name="colorAccent">@color/accent</item>
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@color/primary_dark</item>
+        <!-- Apply VazirMatn globally -->
+        <item name="android:fontFamily">@font/vazirmatn</item>
+        <item name="fontFamily">@font/vazirmatn</item>
     </style>
 
     <style name="CardStyle" parent="Widget.MaterialComponents.CardView">
@@ -14,21 +17,25 @@
         <item name="cardBackgroundColor">@color/card_background</item>
     </style>
 
-    <!-- CAT Yellow-Orange filled button with BLACK text (CAT brand standard) -->
+    <!-- CAT Yellow-Orange filled button with BLACK text -->
     <style name="PrimaryButton" parent="Widget.MaterialComponents.Button">
         <item name="backgroundTint">@color/primary</item>
         <item name="android:textColor">@color/black</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">@font/vazirmatn</item>
+        <item name="fontFamily">@font/vazirmatn</item>
         <item name="cornerRadius">6dp</item>
         <item name="rippleColor">@color/primary_dark</item>
     </style>
 
-    <!-- Outlined secondary button in CAT charcoal -->
+    <!-- Outlined secondary button -->
     <style name="SecondaryButton" parent="Widget.MaterialComponents.Button.OutlinedButton">
         <item name="strokeColor">@color/primary</item>
         <item name="strokeWidth">2dp</item>
         <item name="android:textColor">@color/accent</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:fontFamily">@font/vazirmatn</item>
+        <item name="fontFamily">@font/vazirmatn</item>
         <item name="cornerRadius">6dp</item>
         <item name="rippleColor">@color/ripple</item>
     </style>
