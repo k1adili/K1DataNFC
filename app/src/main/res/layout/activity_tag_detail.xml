@@ -71,7 +71,9 @@
                     android:layout_height="wrap_content"
                     android:inputType="text"
                     android:maxLines="1"
-                    android:enabled="false" />
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:textColor="@color/text_primary" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Note input -->
@@ -89,7 +91,9 @@
                     android:minLines="4"
                     android:maxLines="12"
                     android:gravity="top|start"
-                    android:enabled="false" />
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:textColor="@color/text_primary" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Images section -->
