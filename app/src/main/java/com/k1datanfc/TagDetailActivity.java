@@ -99,8 +99,10 @@ public class TagDetailActivity extends AppCompatActivity {
 
     private void enterEditMode() {
         isEditing = true;
-        etName.setEnabled(true);
-        etNote.setEnabled(true);
+        etName.setFocusableInTouchMode(true);
+        etName.setFocusable(true);
+        etNote.setFocusableInTouchMode(true);
+        etNote.setFocusable(true);
         etName.requestFocus();
         fabEdit.setText("ذخیره");
         fabEdit.setIcon(ContextCompat.getDrawable(this, android.R.drawable.ic_menu_save));
@@ -111,8 +113,12 @@ public class TagDetailActivity extends AppCompatActivity {
 
     private void enterViewMode() {
         isEditing = false;
-        etName.setEnabled(false);
-        etNote.setEnabled(false);
+        // Use focusable=false instead of enabled=false so Android doesn't
+        // automatically dim the text color when in view-only mode.
+        etName.setFocusable(false);
+        etName.setFocusableInTouchMode(false);
+        etNote.setFocusable(false);
+        etNote.setFocusableInTouchMode(false);
         fabEdit.setText("ویرایش");
         fabEdit.setIcon(ContextCompat.getDrawable(this, android.R.drawable.ic_menu_edit));
         findViewById(R.id.btn_add_image).setVisibility(View.GONE);
