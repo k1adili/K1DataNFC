@@ -21,7 +21,8 @@
 
     <!-- Text -->
     <color name="text_primary">#1A1A1A</color>
-    <color name="text_secondary">#6B5B2E</color>
+    <color name="text_secondary">#3D3000</color>
+    <color name="text_disabled">#1A1A1A</color>
     <color name="divider">#E8D5A3</color>
 
     <!-- Status colors -->
