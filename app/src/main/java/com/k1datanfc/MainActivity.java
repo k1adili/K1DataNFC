@@ -2,27 +2,35 @@ package com.k1datanfc;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.nfc.NfcAdapter;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.snackbar.Snackbar;
+import com.journeyapps.barcodescanner.ScanContract;
+import com.journeyapps.barcodescanner.ScanIntentResult;
+import com.journeyapps.barcodescanner.ScanOptions;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements TagListAdapter.TagClickListener {
+
+    private static final int REQUEST_CAMERA_PERMISSION = 300;
 
     private NfcHelper nfcHelper;
     private DatabaseManager dbManager;
@@ -32,6 +40,10 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
     private RecyclerView recyclerView;
     private View emptyView;
     private View nfcScanHint;
+
+    // ZXing QR scanner launcher (Activity Result API — works on all modern Android)
+    private final androidx.activity.result.ActivityResultLauncher<ScanOptions> qrLauncher =
+            registerForActivityResult(new ScanContract(), result -> handleQrResult(result));
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -193,7 +205,10 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == R.id.action_backup) {
+        if (id == R.id.action_scan_qr) {
+            startQrScan();
+            return true;
+        } else if (id == R.id.action_backup) {
             startActivity(new Intent(this, BackupActivity.class));
             return true;
         } else if (id == R.id.action_settings) {
@@ -201,5 +216,63 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    // ─────────────────────────── QR Scanner ──────────────────────────────────
+
+    private void startQrScan() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.CAMERA},
+                    REQUEST_CAMERA_PERMISSION);
+            return;
+        }
+        launchQrScanner();
+    }
+
+    private void launchQrScanner() {
+        ScanOptions options = new ScanOptions()
+                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setPrompt("کد QR را در مقابل دوربین قرار دهید")
+                .setCameraId(0)
+                .setBeepEnabled(true)
+                .setBarcodeImageEnabled(false)
+                .setOrientationLocked(false);
+        qrLauncher.launch(options);
+    }
+
+    private void handleQrResult(ScanIntentResult result) {
+        if (result.getContents() == null) return; // user cancelled
+
+        // Use the QR content as the tag ID — prefix with "QR:" so it never
+        // collides with a real NFC hardware ID (which is always hex digits).
+        String qrContent = result.getContents();
+        String tagId = "QR:" + qrContent;
+
+        NfcTag existingTag = dbManager.findTagById(tagId);
+        if (existingTag != null) {
+            existingTag.setLastScannedAt(System.currentTimeMillis());
+            dbManager.saveTag(existingTag);
+            openTagDetail(tagId, false);
+            Snackbar.make(recyclerView, "کد QR شناخته شد", Snackbar.LENGTH_SHORT).show();
+        } else {
+            openTagDetail(tagId, true);
+            Snackbar.make(recyclerView, "کد QR جدید — اطلاعات وارد کنید", Snackbar.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CAMERA_PERMISSION
+                && grantResults.length > 0
+                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            launchQrScanner();
+        } else if (requestCode == REQUEST_CAMERA_PERMISSION) {
+            Toast.makeText(this, "دسترسی به دوربین لازم است", Toast.LENGTH_SHORT).show();
+        }
     }
 }
