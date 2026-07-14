@@ -82,8 +82,9 @@
                 <Button
                     android:id="@+id/btn_add_image"
                     android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:text="+ افزودن"
+                    android:layout_height="wrap_content"
+                    android:minHeight="0dp"
+                    android:text="+ افزودن تصاویر"
                     style="@style/SecondaryButton" />
             </LinearLayout>
 
