@@ -32,18 +32,17 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
 
     private static final int REQUEST_CAMERA_PERMISSION = 300;
 
-    private NfcHelper nfcHelper;
+    private NfcHelper       nfcHelper;
     private DatabaseManager dbManager;
-    private TagListAdapter adapter;
-    private List<NfcTag> allTags = new ArrayList<>();
+    private TagListAdapter  adapter;
+    private List<NfcTag>    allTags = new ArrayList<>();
 
     private RecyclerView recyclerView;
-    private View emptyView;
-    private View nfcScanHint;
+    private View         emptyView;
 
-    // ZXing QR scanner launcher (Activity Result API — works on all modern Android)
+    // ZXing QR scanner
     private final androidx.activity.result.ActivityResultLauncher<ScanOptions> qrLauncher =
-            registerForActivityResult(new ScanContract(), result -> handleQrResult(result));
+            registerForActivityResult(new ScanContract(), this::handleQrResult);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,15 +63,14 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
 
     private void setupViews() {
         recyclerView = findViewById(R.id.recycler_tags);
-        emptyView = findViewById(R.id.empty_view);
-        nfcScanHint = findViewById(R.id.nfc_scan_hint);
+        emptyView    = findViewById(R.id.empty_view);
 
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
         adapter = new TagListAdapter(this, new ArrayList<>(), this);
         recyclerView.setAdapter(adapter);
 
-        FloatingActionButton fabScan = findViewById(R.id.fab_scan);
-        fabScan.setOnClickListener(v -> showScanDialog());
+        FloatingActionButton fab = findViewById(R.id.fab_scan);
+        fab.setOnClickListener(v -> showScanDialog());
     }
 
     private void checkNfcStatus() {
@@ -80,7 +78,8 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
             Snackbar.make(recyclerView, R.string.nfc_not_supported, Snackbar.LENGTH_LONG).show();
         } else if (!nfcHelper.isNfcEnabled()) {
             Snackbar.make(recyclerView, R.string.nfc_disabled, Snackbar.LENGTH_LONG)
-                    .setAction("تنظیمات", v -> startActivity(new Intent(android.provider.Settings.ACTION_NFC_SETTINGS)))
+                    .setAction("تنظیمات", v ->
+                            startActivity(new Intent(android.provider.Settings.ACTION_NFC_SETTINGS)))
                     .show();
         }
     }
@@ -121,45 +120,42 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
 
     private void handleIntent(Intent intent) {
         if (!NfcHelper.isNfcIntent(intent)) return;
-
         String tagId = NfcHelper.getTagId(intent);
         if (tagId == null || tagId.isEmpty()) {
             Toast.makeText(this, "خواندن تگ ناموفق بود", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        NfcTag existingTag = dbManager.findTagById(tagId);
-        if (existingTag != null) {
-            // Update last scanned time
-            existingTag.setLastScannedAt(System.currentTimeMillis());
-            dbManager.saveTag(existingTag);
-            // Open detail view
-            openTagDetail(tagId, false);
-            Snackbar.make(recyclerView, getString(R.string.existing_tag_found), Snackbar.LENGTH_SHORT).show();
-        } else {
-            // New tag — open editor
-            openTagDetail(tagId, true);
-            Snackbar.make(recyclerView, getString(R.string.new_tag_found), Snackbar.LENGTH_SHORT).show();
-        }
+        openTag(tagId);
     }
 
-    private void openTagDetail(String tagId, boolean isNew) {
+    private void openTag(String tagId) {
+        NfcTag existing = dbManager.findTagById(tagId);
+        boolean isNew   = existing == null;
+        if (existing != null) {
+            existing.touchScanned();
+            dbManager.saveTag(existing);
+        }
         Intent intent = new Intent(this, TagDetailActivity.class);
         intent.putExtra(TagDetailActivity.EXTRA_TAG_ID, tagId);
         intent.putExtra(TagDetailActivity.EXTRA_IS_NEW, isNew);
         startActivity(intent);
     }
 
+    // ── TagListAdapter.TagClickListener ───────────────────────────────
+
     @Override
     public void onTagClick(NfcTag tag) {
-        openTagDetail(tag.getTagId(), false);
+        Intent intent = new Intent(this, TagDetailActivity.class);
+        intent.putExtra(TagDetailActivity.EXTRA_TAG_ID, tag.getTagId());
+        intent.putExtra(TagDetailActivity.EXTRA_IS_NEW, false);
+        startActivity(intent);
     }
 
     @Override
     public void onTagLongClick(NfcTag tag) {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.delete_confirm)
-                .setMessage("تگ \"" + tag.getName() + "\" حذف شود؟")
+                .setMessage("تگ \"" + tag.getName() + "\" و تمام رکوردهایش حذف شود؟")
                 .setPositiveButton(R.string.yes, (d, w) -> {
                     dbManager.deleteTag(tag.getTagId());
                     loadTags();
@@ -169,19 +165,16 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
                 .show();
     }
 
+    // ── Search ────────────────────────────────────────────────────────
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main_menu, menu);
         MenuItem searchItem = menu.findItem(R.id.action_search);
         SearchView searchView = (SearchView) searchItem.getActionView();
         searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String query) { return false; }
-            @Override
-            public boolean onQueryTextChange(String newText) {
-                filterTags(newText);
-                return true;
-            }
+            @Override public boolean onQueryTextSubmit(String q) { return false; }
+            @Override public boolean onQueryTextChange(String q) { filterTags(q); return true; }
         });
         return true;
     }
@@ -191,87 +184,77 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
             adapter.updateTags(allTags);
             return;
         }
+        String q = query.toLowerCase();
         List<NfcTag> filtered = new ArrayList<>();
         for (NfcTag tag : allTags) {
+            // Search in tag name
             String name = tag.getName() != null ? tag.getName().toLowerCase() : "";
-            String note = tag.getNote() != null ? tag.getNote().toLowerCase() : "";
-            if (name.contains(query.toLowerCase()) || note.contains(query.toLowerCase())) {
-                filtered.add(tag);
+            if (name.contains(q)) { filtered.add(tag); continue; }
+            // Search in record titles and notes
+            boolean found = false;
+            if (tag.getRecords() != null) {
+                for (TagRecord r : tag.getRecords()) {
+                    String title = r.getTitle() != null ? r.getTitle().toLowerCase() : "";
+                    String note  = r.getNote()  != null ? r.getNote().toLowerCase()  : "";
+                    if (title.contains(q) || note.contains(q)) { found = true; break; }
+                }
             }
+            if (found) filtered.add(tag);
         }
         adapter.updateTags(filtered);
     }
+
+    // ── Options menu ──────────────────────────────────────────────────
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_scan_qr) {
-            startQrScan();
-            return true;
+            startQrScan(); return true;
         } else if (id == R.id.action_backup) {
-            startActivity(new Intent(this, BackupActivity.class));
-            return true;
+            startActivity(new Intent(this, BackupActivity.class)); return true;
         } else if (id == R.id.action_settings) {
-            startActivity(new Intent(this, SettingsActivity.class));
-            return true;
+            startActivity(new Intent(this, SettingsActivity.class)); return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
-    // ─────────────────────────── QR Scanner ──────────────────────────────────
+    // ── QR Scanner ────────────────────────────────────────────────────
 
     private void startQrScan() {
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this,
-                    new String[]{android.Manifest.permission.CAMERA},
-                    REQUEST_CAMERA_PERMISSION);
+                    new String[]{android.Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
             return;
         }
         launchQrScanner();
     }
 
     private void launchQrScanner() {
-        ScanOptions options = new ScanOptions()
+        ScanOptions opts = new ScanOptions()
                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                 .setPrompt("کد QR را در مقابل دوربین قرار دهید")
                 .setCameraId(0)
                 .setBeepEnabled(true)
                 .setBarcodeImageEnabled(false)
                 .setOrientationLocked(false);
-        qrLauncher.launch(options);
+        qrLauncher.launch(opts);
     }
 
     private void handleQrResult(ScanIntentResult result) {
-        if (result.getContents() == null) return; // user cancelled
-
-        // Use the QR content as the tag ID — prefix with "QR:" so it never
-        // collides with a real NFC hardware ID (which is always hex digits).
-        String qrContent = result.getContents();
-        String tagId = "QR:" + qrContent;
-
-        NfcTag existingTag = dbManager.findTagById(tagId);
-        if (existingTag != null) {
-            existingTag.setLastScannedAt(System.currentTimeMillis());
-            dbManager.saveTag(existingTag);
-            openTagDetail(tagId, false);
-            Snackbar.make(recyclerView, "کد QR شناخته شد", Snackbar.LENGTH_SHORT).show();
-        } else {
-            openTagDetail(tagId, true);
-            Snackbar.make(recyclerView, "کد QR جدید — اطلاعات وارد کنید", Snackbar.LENGTH_SHORT).show();
-        }
+        if (result.getContents() == null) return;
+        openTag("QR:" + result.getContents());
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_CAMERA_PERMISSION
-                && grantResults.length > 0
-                && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+    public void onRequestPermissionsResult(int req, @NonNull String[] perms,
+                                           @NonNull int[] results) {
+        super.onRequestPermissionsResult(req, perms, results);
+        if (req == REQUEST_CAMERA_PERMISSION && results.length > 0
+                && results[0] == PackageManager.PERMISSION_GRANTED) {
             launchQrScanner();
-        } else if (requestCode == REQUEST_CAMERA_PERMISSION) {
+        } else if (req == REQUEST_CAMERA_PERMISSION) {
             Toast.makeText(this, "دسترسی به دوربین لازم است", Toast.LENGTH_SHORT).show();
         }
     }
