@@ -2,32 +2,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- NFC Permission -->
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
-    <!-- Camera for QR code scanning -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- Storage Permissions -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
-        tools:ignore="ScopedStorage" />
-    <!-- Needed to write a backup folder at the root of phone storage (Android 11+) -->
-    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
-
-    <!-- Internet for cloud backup -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    
-    <!-- Account for Google Drive -->
     <uses-permission android:name="android.permission.GET_ACCOUNTS" />
-    <uses-permission android:name="android.permission.USE_CREDENTIALS" />
 
     <application
         android:name=".K1Application"
@@ -40,7 +27,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
-        <!-- PIN Lock Activity — this is the real entry point -->
+        <!-- PIN Lock — LAUNCHER -->
         <activity
             android:name=".PinActivity"
             android:exported="true"
@@ -51,12 +38,11 @@
             </intent-filter>
         </activity>
 
-        <!-- Main Activity -->
+        <!-- Main tag list + NFC dispatch -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
             android:launchMode="singleTop">
-            <!-- NFC Intent Filter -->
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -74,26 +60,31 @@
                 android:resource="@xml/nfc_tech_filter" />
         </activity>
 
-        <!-- Tag Detail Activity -->
+        <!-- Tag detail (name + records timeline) -->
         <activity
             android:name=".TagDetailActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Backup Activity -->
+        <!-- Record add/edit -->
+        <activity
+            android:name=".RecordEditActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:parentActivityName=".TagDetailActivity" />
+
+        <!-- Backup -->
         <activity
             android:name=".BackupActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Settings Activity -->
+        <!-- Settings -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- FileProvider for image sharing -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
