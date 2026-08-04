@@ -233,7 +233,7 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
 
     private void launchQrScanner() {
         ScanOptions opts = new ScanOptions()
-                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                .setDesiredBarcodeFormats(ScanOptions.ALL_CODE_TYPES)
                 .setPrompt("کد QR را در مقابل دوربین قرار دهید")
                 .setCameraId(0)
                 .setBeepEnabled(true)
