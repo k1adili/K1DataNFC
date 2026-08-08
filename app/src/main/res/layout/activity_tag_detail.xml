@@ -23,7 +23,7 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Compact ID card -->
+        <!-- Compact ID card — no icon -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -32,36 +32,20 @@
             app:cardElevation="3dp"
             app:cardBackgroundColor="@color/primary">
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tv_tag_id"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:padding="12dp">
+                android:padding="12dp"
+                android:textSize="15sp"
+                android:textColor="@color/black"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:textStyle="bold" />
 
-                <!-- Tag icon -->
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🏷️"
-                    android:textSize="22sp"
-                    android:layout_marginEnd="10dp" />
-
-                <!-- ID centered -->
-                <TextView
-                    android:id="@+id/tv_tag_id"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="15sp"
-                    android:textColor="@color/black"
-                    android:fontFamily="monospace"
-                    android:gravity="center"
-                    android:textStyle="bold" />
-            </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Records section label -->
+        <!-- Records label -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -86,7 +70,7 @@
             android:lineSpacingExtra="6dp"
             android:visibility="gone" />
 
-        <!-- Records timeline -->
+        <!-- Records list -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/recycler_records"
             android:layout_width="match_parent"
@@ -97,7 +81,6 @@
 
     </LinearLayout>
 
-    <!-- FAB: add new record -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/fab_add_record"
         android:layout_width="wrap_content"
