@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -49,6 +51,7 @@ public class RecordEditActivity extends AppCompatActivity {
     private boolean           isNew;
     private String            replacingImagePath = null;
     private Uri               cameraImageUri     = null;
+    private File              cameraImageFile    = null;
 
     private TextInputEditText etTitle, etNote;
     private LinearLayout      imagesContainer;
@@ -85,7 +88,7 @@ public class RecordEditActivity extends AppCompatActivity {
         imagesContainer = findViewById(R.id.images_container);
 
         Button btnAddImage = findViewById(R.id.btn_add_image);
-        btnAddImage.setOnClickListener(v -> showImageSourceDialog());
+        btnAddImage.setOnClickListener(v -> showImageSourceDialog(null));
 
         ExtendedFloatingActionButton fabSave = findViewById(R.id.fab_save_record);
         fabSave.setOnClickListener(v -> saveRecord());
@@ -93,21 +96,10 @@ public class RecordEditActivity extends AppCompatActivity {
 
     // ── Image source chooser ──────────────────────────────────────────
 
-    private void showImageSourceDialog() {
-        replacingImagePath = null;
+    private void showImageSourceDialog(String replacePath) {
+        replacingImagePath = replacePath;
         new AlertDialog.Builder(this)
                 .setTitle("افزودن تصویر")
-                .setItems(new String[]{"📷  دوربین", "🖼️  گالری"}, (d, which) -> {
-                    if (which == 0) openCamera();
-                    else            openGallery();
-                })
-                .show();
-    }
-
-    private void showReplaceImageDialog(String path) {
-        replacingImagePath = path;
-        new AlertDialog.Builder(this)
-                .setTitle("تغییر تصویر")
                 .setItems(new String[]{"📷  دوربین", "🖼️  گالری"}, (d, which) -> {
                     if (which == 0) openCamera();
                     else            openGallery();
@@ -129,9 +121,9 @@ public class RecordEditActivity extends AppCompatActivity {
 
     private void launchCamera() {
         try {
-            File photoFile = File.createTempFile("k1_photo_", ".jpg", getCacheDir());
-            cameraImageUri = FileProvider.getUriForFile(this,
-                    getPackageName() + ".fileprovider", photoFile);
+            cameraImageFile = File.createTempFile("k1_photo_", ".jpg", getCacheDir());
+            cameraImageUri  = FileProvider.getUriForFile(this,
+                    getPackageName() + ".fileprovider", cameraImageFile);
             Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
             intent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri);
             startActivityForResult(intent, REQ_CAMERA);
@@ -159,7 +151,8 @@ public class RecordEditActivity extends AppCompatActivity {
     // ── Permissions ───────────────────────────────────────────────────
 
     @Override
-    public void onRequestPermissionsResult(int req, @NonNull String[] perms, @NonNull int[] results) {
+    public void onRequestPermissionsResult(int req, @NonNull String[] perms,
+                                           @NonNull int[] results) {
         super.onRequestPermissionsResult(req, perms, results);
         if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) return;
         if (req == REQ_CAM_PERM) launchCamera();
@@ -172,42 +165,51 @@ public class RecordEditActivity extends AppCompatActivity {
     protected void onActivityResult(int req, int res, @Nullable Intent data) {
         super.onActivityResult(req, res, data);
 
-        Uri imageUri = null;
-        if (req == REQ_GALLERY && res == RESULT_OK && data != null) {
-            imageUri = data.getData();
-        } else if (req == REQ_CAMERA && res == RESULT_OK) {
-            imageUri = cameraImageUri;
-        } else {
+        if (res != RESULT_OK) {
             replacingImagePath = null;
-            cameraImageUri = null;
+            cameraImageFile    = null;
             return;
         }
 
+        boolean fromCamera = (req == REQ_CAMERA);
+        Uri imageUri = fromCamera ? cameraImageUri
+                : (data != null ? data.getData() : null);
+
         if (imageUri == null) { replacingImagePath = null; return; }
 
-        final String oldPath  = replacingImagePath;
-        replacingImagePath    = null;
-        final Uri finalUri    = imageUri;
+        final String oldPath   = replacingImagePath;
+        replacingImagePath     = null;
+        final Uri   finalUri   = imageUri;
+        final File  camFile    = cameraImageFile;
+        cameraImageFile        = null;
 
         new Thread(() -> {
             try {
                 byte[] raw;
-                if (req == REQ_CAMERA) {
-                    // Read directly from file URI
-                    InputStream is = getContentResolver().openInputStream(finalUri);
-                    raw = readStream(is);
-                } else {
-                    InputStream is = getContentResolver().openInputStream(finalUri);
-                    raw = readStream(is);
-                }
+                InputStream is = getContentResolver().openInputStream(finalUri);
+                raw = readStream(is);
+
                 Bitmap bmp = BitmapFactory.decodeByteArray(raw, 0, raw.length);
-                // Resize if too large (max 1920px on longer side)
+
+                // ── Fix EXIF rotation ──────────────────────────────────────
+                // Camera apps write the real orientation into EXIF but don't
+                // physically rotate the pixels. We read it and apply the
+                // correct rotation manually so portrait stays portrait.
+                if (fromCamera && camFile != null) {
+                    bmp = fixExifRotation(bmp, camFile.getAbsolutePath());
+                } else {
+                    // For gallery images use the URI-based EXIF reader
+                    bmp = fixExifRotationUri(bmp, finalUri);
+                }
+
                 bmp = resizeIfNeeded(bmp, 1920);
+
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 bmp.compress(Bitmap.CompressFormat.JPEG, 82, baos);
-                byte[] compressed = baos.toByteArray();
 
-                String saved = dbManager.saveEncryptedImage(compressed, currentTag.getTagId());
+                String saved = dbManager.saveEncryptedImage(
+                        baos.toByteArray(), currentTag.getTagId());
+
                 if (saved != null) {
                     if (oldPath != null) {
                         dbManager.deleteImageFile(oldPath);
@@ -220,9 +222,69 @@ public class RecordEditActivity extends AppCompatActivity {
                     }
                 }
             } catch (IOException e) {
-                runOnUiThread(() -> Toast.makeText(this, "خطا در بارگذاری تصویر", Toast.LENGTH_SHORT).show());
+                runOnUiThread(() -> Toast.makeText(this,
+                        "خطا در بارگذاری تصویر", Toast.LENGTH_SHORT).show());
             }
         }).start();
+    }
+
+    // ── EXIF rotation helpers ─────────────────────────────────────────
+
+    /**
+     * Reads EXIF from a file path (camera output) and rotates the bitmap
+     * so what the user saw through the viewfinder matches what's stored.
+     */
+    private Bitmap fixExifRotation(Bitmap bmp, String filePath) {
+        try {
+            ExifInterface exif = new ExifInterface(filePath);
+            int orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL);
+            return rotateBitmap(bmp, exifToDegrees(orientation));
+        } catch (Exception e) {
+            return bmp; // if EXIF unreadable, return as-is
+        }
+    }
+
+    /**
+     * Reads EXIF via ContentResolver for gallery images (Uri-based).
+     */
+    private Bitmap fixExifRotationUri(Bitmap bmp, Uri uri) {
+        try {
+            InputStream is = getContentResolver().openInputStream(uri);
+            if (is == null) return bmp;
+            ExifInterface exif;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                exif = new ExifInterface(is);
+            } else {
+                // Fallback for older APIs — can't read from stream, skip rotation fix
+                is.close();
+                return bmp;
+            }
+            is.close();
+            int orientation = exif.getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL);
+            return rotateBitmap(bmp, exifToDegrees(orientation));
+        } catch (Exception e) {
+            return bmp;
+        }
+    }
+
+    private int exifToDegrees(int exifOrientation) {
+        switch (exifOrientation) {
+            case ExifInterface.ORIENTATION_ROTATE_90:  return 90;
+            case ExifInterface.ORIENTATION_ROTATE_180: return 180;
+            case ExifInterface.ORIENTATION_ROTATE_270: return 270;
+            default:                                   return 0;
+        }
+    }
+
+    private Bitmap rotateBitmap(Bitmap bmp, int degrees) {
+        if (degrees == 0) return bmp;
+        Matrix matrix = new Matrix();
+        matrix.postRotate(degrees);
+        return Bitmap.createBitmap(bmp, 0, 0, bmp.getWidth(), bmp.getHeight(), matrix, true);
     }
 
     // ── Image views ───────────────────────────────────────────────────
@@ -252,7 +314,7 @@ public class RecordEditActivity extends AppCompatActivity {
             }
         }).start();
 
-        iv.setOnClickListener(vv -> showReplaceImageDialog(path));
+        iv.setOnClickListener(vv -> showImageSourceDialog(path));
         btnDel.setOnClickListener(vv ->
                 new AlertDialog.Builder(this)
                         .setMessage("این تصویر حذف شود؟")
@@ -285,13 +347,15 @@ public class RecordEditActivity extends AppCompatActivity {
             currentTag.addRecord(currentRecord);
         } else {
             for (int i = 0; i < currentTag.getRecords().size(); i++) {
-                if (currentTag.getRecords().get(i).getRecordId().equals(currentRecord.getRecordId())) {
+                if (currentTag.getRecords().get(i).getRecordId()
+                        .equals(currentRecord.getRecordId())) {
                     currentTag.getRecords().set(i, currentRecord); break;
                 }
             }
         }
         dbManager.saveTag(currentTag);
-        Toast.makeText(this, isNew ? "رکورد ذخیره شد" : "رکورد به‌روز شد", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, isNew ? "رکورد ذخیره شد" : "رکورد به‌روز شد",
+                Toast.LENGTH_SHORT).show();
         setResult(RESULT_OK);
         finish();
     }
@@ -302,7 +366,7 @@ public class RecordEditActivity extends AppCompatActivity {
         int w = src.getWidth(), h = src.getHeight();
         if (w <= maxSide && h <= maxSide) return src;
         float scale = maxSide / (float) Math.max(w, h);
-        return Bitmap.createScaledBitmap(src, (int)(w*scale), (int)(h*scale), true);
+        return Bitmap.createScaledBitmap(src, (int)(w * scale), (int)(h * scale), true);
     }
 
     private byte[] readStream(InputStream is) throws IOException {
