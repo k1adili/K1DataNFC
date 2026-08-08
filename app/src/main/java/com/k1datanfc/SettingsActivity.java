@@ -8,13 +8,14 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String PREFS_SETTINGS = "k1_settings";
-    private static final String KEY_PIN_HASH = "pin_hash";
+    private static final String KEY_PIN_HASH   = "pin_hash";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,19 +27,26 @@ public class SettingsActivity extends AppCompatActivity {
         getSupportActionBar().setTitle(R.string.settings);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
 
-        // App version
-        TextView tvVersion = findViewById(R.id.tv_version);
-        tvVersion.setText("نسخه 2.0");
-
+        // Version & about
+        TextView tvVersion   = findViewById(R.id.tv_version);
         TextView tvDeveloper = findViewById(R.id.tv_developer);
-        tvDeveloper.setText("طراح و برنامه نویس: کیوان عدیلی");
+        tvVersion.setText("Version 2.1");
+        tvDeveloper.setText("Developed by Keyvan Adili");
+
+        // Encryption info
+        TextView tvEncInfo = findViewById(R.id.tv_enc_info);
+        tvEncInfo.setText("Encryption: AES-256-GCM\nKey stored in Android Keystore\nData is only readable by this app");
 
         // PIN setup
-        EditText etPin = findViewById(R.id.et_pin);
+        EditText etPin        = findViewById(R.id.et_pin);
         EditText etPinConfirm = findViewById(R.id.et_pin_confirm);
-        Button btnSavePin = findViewById(R.id.btn_save_pin);
+        Button   btnSavePin   = findViewById(R.id.btn_save_pin);
+        Button   btnDeletePin = findViewById(R.id.btn_delete_pin);
+
+        refreshDeletePinButton(btnDeletePin);
+
         btnSavePin.setOnClickListener(v -> {
-            String pin = etPin.getText().toString().trim();
+            String pin     = etPin.getText().toString().trim();
             String confirm = etPinConfirm.getText().toString().trim();
             if (pin.isEmpty()) {
                 Toast.makeText(this, "رمز عبور نمی‌تواند خالی باشد", Toast.LENGTH_SHORT).show();
@@ -48,25 +56,42 @@ public class SettingsActivity extends AppCompatActivity {
                 Toast.makeText(this, R.string.pin_mismatch, Toast.LENGTH_SHORT).show();
                 return;
             }
-            // Store hashed PIN
-            String hash = Integer.toHexString(pin.hashCode());
             getSharedPreferences(PREFS_SETTINGS, MODE_PRIVATE).edit()
-                    .putString(KEY_PIN_HASH, hash).apply();
+                    .putString(KEY_PIN_HASH, Integer.toHexString(pin.hashCode())).apply();
             etPin.setText("");
             etPinConfirm.setText("");
             Toast.makeText(this, R.string.pin_changed, Toast.LENGTH_SHORT).show();
+            refreshDeletePinButton(btnDeletePin);
         });
 
-        // Encryption info
-        TextView tvEncInfo = findViewById(R.id.tv_enc_info);
-        tvEncInfo.setText("رمزنگاری: AES-256-GCM\nکلید در Android Keystore ذخیره می‌شود\nداده‌ها فقط توسط این اپ قابل خواندن هستند");
+        btnDeletePin.setOnClickListener(v ->
+            new AlertDialog.Builder(this)
+                .setTitle("حذف رمز عبور")
+                .setMessage("آیا مطمئن هستید؟ بعد از حذف، برنامه بدون رمز عبور باز می‌شود.")
+                .setPositiveButton("حذف", (d, w) -> {
+                    getSharedPreferences(PREFS_SETTINGS, MODE_PRIVATE).edit()
+                            .remove(KEY_PIN_HASH).apply();
+                    Toast.makeText(this, "رمز عبور حذف شد", Toast.LENGTH_SHORT).show();
+                    refreshDeletePinButton(btnDeletePin);
+                })
+                .setNegativeButton("انصراف", null)
+                .show()
+        );
     }
+
+    private void refreshDeletePinButton(Button btn) {
+        boolean hasPIN = hasPinSet(this);
+        btn.setEnabled(hasPIN);
+        btn.setAlpha(hasPIN ? 1f : 0.4f);
+    }
+
+    // ── Static helpers used by PinActivity ───────────────────────────
 
     public static boolean verifyPin(android.content.Context ctx, String pin) {
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS_SETTINGS, android.content.Context.MODE_PRIVATE);
-        String savedHash = prefs.getString(KEY_PIN_HASH, null);
-        if (savedHash == null) return true; // no PIN set
-        return savedHash.equals(Integer.toHexString(pin.hashCode()));
+        String saved = prefs.getString(KEY_PIN_HASH, null);
+        if (saved == null) return true;
+        return saved.equals(Integer.toHexString(pin.hashCode()));
     }
 
     public static boolean hasPinSet(android.content.Context ctx) {

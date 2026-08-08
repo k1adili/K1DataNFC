@@ -23,9 +23,9 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
     public static final String EXTRA_IS_NEW = "is_new";
 
     private DatabaseManager dbManager;
-    private NfcTag currentTag;
+    private NfcTag          currentTag;
 
-    private TextView tvTagId, tvTagName, tvEmpty;
+    private TextView    tvTagId, tvEmpty;
     private RecyclerView recyclerRecords;
     private RecordAdapter adapter;
 
@@ -43,7 +43,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         String tagId = getIntent().getStringExtra(EXTRA_TAG_ID);
         boolean isNew = getIntent().getBooleanExtra(EXTRA_IS_NEW, false);
 
-        // Load or create tag
         currentTag = dbManager.findTagById(tagId);
         if (currentTag == null) {
             currentTag = new NfcTag(tagId);
@@ -52,37 +51,36 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
 
         setupViews();
 
-        if (isNew || (currentTag.getName() == null || currentTag.getName().isEmpty())) {
+        if (isNew || currentTag.getName() == null || currentTag.getName().isEmpty()) {
             promptEditName(true);
         }
     }
 
     private void setupViews() {
-        tvTagId   = findViewById(R.id.tv_tag_id);
-        tvTagName = findViewById(R.id.tv_tag_name);
-        tvEmpty   = findViewById(R.id.tv_empty_records);
-        recyclerRecords = findViewById(R.id.recycler_records);
+        tvTagId        = findViewById(R.id.tv_tag_id);
+        tvEmpty        = findViewById(R.id.tv_empty_records);
+        recyclerRecords= findViewById(R.id.recycler_records);
 
         tvTagId.setText("ID: " + currentTag.getTagId());
-        refreshName();
+        refreshTitle();
 
         recyclerRecords.setLayoutManager(new LinearLayoutManager(this));
         adapter = new RecordAdapter(this, currentTag.getRecords(), this);
         recyclerRecords.setAdapter(adapter);
         refreshEmpty();
 
-        // Edit name on tap
-        tvTagName.setOnClickListener(v -> promptEditName(false));
+        // Long-press on toolbar title to edit name
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        toolbar.setOnLongClickListener(v -> { promptEditName(false); return true; });
 
-        // FAB — add new record
         ExtendedFloatingActionButton fab = findViewById(R.id.fab_add_record);
         fab.setOnClickListener(v -> openRecordEditor(null));
     }
 
-    private void refreshName() {
+    private void refreshTitle() {
         String name = currentTag.getName();
-        tvTagName.setText(name != null && !name.isEmpty() ? name : "بدون نام");
-        getSupportActionBar().setTitle(name != null && !name.isEmpty() ? name : "جزئیات تگ");
+        String title = (name != null && !name.isEmpty()) ? name : "بدون نام";
+        getSupportActionBar().setTitle(title);
     }
 
     private void refreshEmpty() {
@@ -91,7 +89,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         recyclerRecords.setVisibility(empty ? View.GONE : View.VISIBLE);
     }
 
-    /** Open RecordEditActivity for a new record (null) or existing one */
     private void openRecordEditor(TagRecord record) {
         Intent intent = new Intent(this, RecordEditActivity.class);
         intent.putExtra(RecordEditActivity.EXTRA_TAG_ID, currentTag.getTagId());
@@ -101,10 +98,9 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
     }
 
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 100 && resultCode == RESULT_OK) {
-            // Reload tag from DB (record was saved inside RecordEditActivity)
             currentTag = dbManager.findTagById(currentTag.getTagId());
             if (currentTag == null) { finish(); return; }
             adapter.update(currentTag.getRecords());
@@ -112,19 +108,13 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         }
     }
 
-    // ── RecordAdapter.Listener ─────────────────────────────────────────
-
-    @Override
-    public void onRecordClick(TagRecord record) {
-        openRecordEditor(record);
-    }
+    @Override public void onRecordClick(TagRecord record)  { openRecordEditor(record); }
 
     @Override
     public void onRecordDelete(TagRecord record) {
         new AlertDialog.Builder(this)
                 .setMessage("رکورد «" + record.getTitle() + "» حذف شود؟")
                 .setPositiveButton("حذف", (d, w) -> {
-                    // Delete image files
                     if (record.getImagePaths() != null)
                         for (String p : record.getImagePaths()) dbManager.deleteImageFile(p);
                     currentTag.removeRecord(record.getRecordId());
@@ -133,17 +123,14 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
                     refreshEmpty();
                     Toast.makeText(this, "رکورد حذف شد", Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("انصراف", null)
-                .show();
+                .setNegativeButton("انصراف", null).show();
     }
 
-    // ── Edit tag name ──────────────────────────────────────────────────
-
     private void promptEditName(boolean isFirst) {
-        int dp16 = (int)(16 * getResources().getDisplayMetrics().density);
+        int dp = (int)(16 * getResources().getDisplayMetrics().density);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(dp16*2, dp16, dp16*2, 0);
+        layout.setPadding(dp * 2, dp, dp * 2, 0);
 
         EditText et = new EditText(this);
         et.setHint("نام تگ را وارد کنید");
@@ -152,14 +139,14 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         layout.addView(et);
 
         new AlertDialog.Builder(this)
-                .setTitle(isFirst ? "نام این تگ چیست؟" : "ویرایش نام")
+                .setTitle(isFirst ? "نام این تگ چیست؟" : "ویرایش نام تگ")
                 .setView(layout)
                 .setPositiveButton("ذخیره", (d, w) -> {
                     String name = et.getText().toString().trim();
                     if (name.isEmpty() && isFirst) name = "تگ بدون نام";
                     currentTag.setName(name);
                     dbManager.saveTag(currentTag);
-                    refreshName();
+                    refreshTitle();
                 })
                 .setNegativeButton("انصراف", (d, w) -> { if (isFirst) finish(); })
                 .setCancelable(!isFirst)
