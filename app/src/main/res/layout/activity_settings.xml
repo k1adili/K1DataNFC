@@ -15,7 +15,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             android:background="@color/primary"
-            app:titleTextColor="@color/white" />
+            app:titleTextColor="@color/black" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
@@ -28,7 +28,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- Security section -->
+            <!-- ── Security section ── -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -78,7 +78,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="تکرار رمز عبور"
-                        android:layout_marginBottom="12dp"
+                        android:layout_marginBottom="14dp"
                         style="@style/InputLayout"
                         app:passwordToggleEnabled="true">
                         <com.google.android.material.textfield.TextInputEditText
@@ -88,16 +88,27 @@
                             android:inputType="numberPassword" />
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Save PIN -->
                     <Button
                         android:id="@+id/btn_save_pin"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="ذخیره رمز عبور"
+                        android:layout_marginBottom="10dp"
                         style="@style/PrimaryButton" />
+
+                    <!-- Delete PIN -->
+                    <Button
+                        android:id="@+id/btn_delete_pin"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="حذف رمز عبور"
+                        style="@style/SecondaryButton" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Encryption info -->
+            <!-- ── Encryption info ── -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -113,7 +124,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="🔐  اطلاعات رمزنگاری"
+                        android:text="🔐  Encryption Info"
                         android:textSize="15sp"
                         android:textStyle="bold"
                         android:textColor="@color/info_text"
@@ -128,45 +139,64 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- About -->
+            <!-- ── About ── -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="12dp"
-                app:cardElevation="3dp">
+                app:cardElevation="3dp"
+                android:layout_marginBottom="16dp">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="16dp">
+                    android:padding="20dp"
+                    android:gravity="center">
+
                     <TextView
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="ℹ️  درباره برنامه"
-                        android:textSize="15sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:layout_marginBottom="6dp" />
+                        android:text="📡"
+                        android:textSize="40sp"
+                        android:layout_marginBottom="8dp" />
+
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="K1 Data NFC"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_secondary" />
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:gravity="center"
+                        android:layout_marginBottom="4dp" />
+
                     <TextView
                         android:id="@+id/tv_version"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:textSize="14sp"
+                        android:textColor="@color/primary_dark"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Smart NFC &amp; QR Tag Manager"
                         android:textSize="13sp"
-                        android:textColor="@color/text_secondary" />
+                        android:textColor="@color/text_secondary"
+                        android:gravity="center"
+                        android:layout_marginBottom="4dp" />
+
                     <TextView
                         android:id="@+id/tv_developer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
                         android:textSize="13sp"
-                        android:textColor="@color/primary_dark"
-                        android:textStyle="italic" />
+                        android:textColor="@color/text_secondary"
+                        android:gravity="center" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

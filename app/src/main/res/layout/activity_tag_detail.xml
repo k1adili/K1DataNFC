@@ -23,55 +23,41 @@
         android:orientation="vertical"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-        <!-- Tag header card -->
+        <!-- Compact ID card -->
         <androidx.cardview.widget.CardView
-            xmlns:app2="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_margin="12dp"
-            app2:cardCornerRadius="14dp"
-            app2:cardElevation="4dp"
-            app2:cardBackgroundColor="@color/primary">
+            app:cardCornerRadius="12dp"
+            app:cardElevation="3dp"
+            app:cardBackgroundColor="@color/primary">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="12dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <!-- Tag icon -->
+                <TextView
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:text="🏷️"
+                    android:textSize="22sp"
+                    android:layout_marginEnd="10dp" />
 
-                    <TextView
-                        android:id="@+id/tv_tag_name"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:textSize="22sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/black"
-                        android:hint="نام تگ" />
-
-                    <!-- edit pencil hint -->
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="✏️"
-                        android:textSize="18sp"
-                        android:alpha="0.7" />
-                </LinearLayout>
-
+                <!-- ID centered -->
                 <TextView
                     android:id="@+id/tv_tag_id"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:textSize="11sp"
-                    android:textColor="#AA000000"
-                    android:fontFamily="monospace" />
+                    android:layout_weight="1"
+                    android:textSize="15sp"
+                    android:textColor="@color/black"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:textStyle="bold" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
