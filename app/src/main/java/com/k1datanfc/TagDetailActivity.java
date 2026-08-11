@@ -217,7 +217,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
 
         new AlertDialog.Builder(ctx)
                 .setTitle("تگ جدید — کجا اضافه شود؟")
-                .setMessage("این تگ قبلاً ثبت نشده. به گروه موجود اضافه شود یا گروه جدید بسازید؟")
                 .setItems(names, (d, which) -> {
                     if (which == all.size()) {
                         onCreateNew.run();
