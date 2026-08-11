@@ -30,7 +30,7 @@ public class SettingsActivity extends AppCompatActivity {
         // Version & about
         TextView tvVersion   = findViewById(R.id.tv_version);
         TextView tvDeveloper = findViewById(R.id.tv_developer);
-        tvVersion.setText("Version 2.1");
+        tvVersion.setText("Version 3.0 (Multi tag)");
         tvDeveloper.setText("Developed by Keyvan Adili");
 
         // Encryption info
