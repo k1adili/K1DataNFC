@@ -21,8 +21,8 @@ public class TagListAdapter extends RecyclerView.Adapter<TagListAdapter.ViewHold
         void onTagLongClick(NfcTag tag);
     }
 
-    private final Context context;
-    private List<NfcTag> tags;
+    private final Context         context;
+    private List<NfcTag>          tags;
     private final TagClickListener listener;
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US);
 
@@ -51,7 +51,7 @@ public class TagListAdapter extends RecyclerView.Adapter<TagListAdapter.ViewHold
         String name = tag.getName();
         holder.tvName.setText(name != null && !name.isEmpty() ? name : "تگ بدون نام");
 
-        // Show preview of the latest record's title (index 0 = newest)
+        // Latest record title as preview
         List<TagRecord> records = tag.getRecords();
         if (records != null && !records.isEmpty()) {
             TagRecord latest = records.get(0);
@@ -65,15 +65,18 @@ public class TagListAdapter extends RecyclerView.Adapter<TagListAdapter.ViewHold
             holder.tvNote.setVisibility(View.GONE);
         }
 
-        // Tag ID
-        holder.tvTagId.setText("ID: " + tag.getTagId());
+        // Primary tag ID (first in list)
+        holder.tvTagId.setText("ID: " + tag.getPrimaryTagId());
 
-        // Last scanned date
+        // Last scanned
         holder.tvDate.setText(sdf.format(new Date(tag.getLastScannedAt())));
 
-        // Record count
+        // Record count + linked tag count
         int recCount = records != null ? records.size() : 0;
-        holder.tvImages.setText(recCount + " رکورد");
+        int tagCount = tag.getTagIds() != null ? tag.getTagIds().size() : 0;
+        String badge = recCount + " رکورد";
+        if (tagCount > 1) badge += "  •  " + tagCount + " تگ";
+        holder.tvImages.setText(badge);
 
         holder.itemView.setOnClickListener(v -> listener.onTagClick(tag));
         holder.itemView.setOnLongClickListener(v -> { listener.onTagLongClick(tag); return true; });

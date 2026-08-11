@@ -18,18 +18,20 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton;
 
+import java.util.List;
+
 public class TagDetailActivity extends AppCompatActivity implements RecordAdapter.Listener {
 
-    public static final String EXTRA_TAG_ID  = "tag_id";   // the scanned tag ID
+    public static final String EXTRA_TAG_ID  = "tag_id";
     public static final String EXTRA_IS_NEW  = "is_new";
-    public static final String EXTRA_GROUP_ID= "group_id"; // stable group ID
+    public static final String EXTRA_GROUP_ID= "group_id";
 
     private DatabaseManager dbManager;
     private NfcTag          currentTag;
-    private String          scannedTagId;   // the ID that triggered this open
+    private String          scannedTagId;
 
-    private TextView     tvTagId, tvEmpty;
-    private RecyclerView recyclerRecords;
+    private TextView      tvTagId, tvEmpty;
+    private RecyclerView  recyclerRecords;
     private RecordAdapter adapter;
 
     @Override
@@ -46,7 +48,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         String groupId = getIntent().getStringExtra(EXTRA_GROUP_ID);
         boolean isNew  = getIntent().getBooleanExtra(EXTRA_IS_NEW, false);
 
-        // Load by groupId if available (e.g. opened from list), else by scanned tagId
         if (groupId != null) {
             currentTag = dbManager.findTagByGroupId(groupId);
         } else if (scannedTagId != null) {
@@ -78,7 +79,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         recyclerRecords.setAdapter(adapter);
         refreshEmpty();
 
-        // Long-press toolbar to rename
         Toolbar toolbar = findViewById(R.id.toolbar);
         toolbar.setOnLongClickListener(v -> { promptEditName(false); return true; });
 
@@ -87,15 +87,17 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
     }
 
     private void refreshTagIdDisplay() {
-        // Show all linked tag IDs
-        StringBuilder sb = new StringBuilder();
-        if (currentTag.getTagIds() != null) {
-            for (int i = 0; i < currentTag.getTagIds().size(); i++) {
-                if (i > 0) sb.append("\n");
-                sb.append(currentTag.getTagIds().get(i));
-            }
+        List<String> ids = currentTag.getTagIds();
+        if (ids == null || ids.isEmpty()) {
+            tvTagId.setText("بدون تگ");
+            return;
         }
-        tvTagId.setText(sb.length() > 0 ? sb.toString() : "بدون تگ");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ids.size(); i++) {
+            if (i > 0) sb.append("\n");
+            sb.append(ids.get(i));
+        }
+        tvTagId.setText(sb.toString());
     }
 
     private void refreshTitle() {
@@ -110,7 +112,7 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         recyclerRecords.setVisibility(empty ? View.GONE : View.VISIBLE);
     }
 
-    // ── Options menu — manage linked tags ─────────────────────────────
+    // ── Options menu ──────────────────────────────────────────────────
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -121,40 +123,35 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-        if (id == android.R.id.home) { finish(); return true; }
-        if (id == R.id.action_manage_tags) { showManageTagsDialog(); return true; }
-        if (id == R.id.action_rename)      { promptEditName(false); return true; }
+        if (id == android.R.id.home)         { finish(); return true; }
+        if (id == R.id.action_manage_tags)   { showManageTagsDialog(); return true; }
+        if (id == R.id.action_rename)        { promptEditName(false); return true; }
         return super.onOptionsItemSelected(item);
     }
 
-    // ── Manage linked tag IDs ─────────────────────────────────────────
+    // ── Manage linked tags ────────────────────────────────────────────
 
     private void showManageTagsDialog() {
-        String[] options = {
-                "➕  اضافه کردن تگ/QR جدید",
-                "🗑️  حذف یک تگ از این گروه",
-                "📋  نمایش همه تگ‌های مرتبط"
-        };
         new AlertDialog.Builder(this)
                 .setTitle("مدیریت تگ‌ها")
-                .setItems(options, (d, which) -> {
-                    if (which == 0) promptAddNewTag();
+                .setItems(new String[]{
+                        "➕  افزودن تگ/QR جدید به این گروه",
+                        "🗑️  حذف یک تگ از این گروه",
+                        "📋  نمایش همه تگ‌های مرتبط"
+                }, (d, which) -> {
+                    if (which == 0)      promptAddNewTag();
                     else if (which == 1) promptRemoveTag();
-                    else showAllTagIds();
+                    else                 showAllTagIds();
                 })
                 .show();
     }
 
-    /**
-     * "اضافه کردن تگ جدید": کاربر می‌تونه یه تگ NFC دیگه اسکن کنه
-     * یا ID رو دستی وارد کنه. وقتی اون تگ اسکن بشه، همین گروه باز می‌شه.
-     */
     private void promptAddNewTag() {
         new AlertDialog.Builder(this)
-                .setTitle("افزودن تگ/QR جدید")
+                .setTitle("افزودن تگ جدید")
                 .setMessage("تگ NFC یا QR کد جدید را اسکن کنید.\n\n" +
-                        "وقتی اسکن کنید، اگر آن تگ به هیچ گروهی وصل نباشد " +
-                        "می‌توانید آن را به این گروه اضافه کنید.\n\n" +
+                        "سپس برگردید و دوباره آن تگ را اسکن کنید — " +
+                        "از شما پرسیده می‌شود به این گروه اضافه شود.\n\n" +
                         "یا اگر ID تگ را می‌دانید، دستی وارد کنید:")
                 .setPositiveButton("وارد کردن دستی", (d, w) -> promptManualTagId())
                 .setNegativeButton("انصراف", null)
@@ -166,7 +163,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp * 2, dp, dp * 2, 0);
-
         EditText et = new EditText(this);
         et.setHint("مثال: AABBCCDD یا QR:https://...");
         et.setSingleLine(true);
@@ -178,12 +174,11 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
                 .setPositiveButton("افزودن", (d, w) -> {
                     String newId = et.getText().toString().trim();
                     if (newId.isEmpty()) return;
-                    // Check if this ID already belongs to another group
                     NfcTag existing = dbManager.findTagById(newId);
                     if (existing != null && !existing.getGroupId().equals(currentTag.getGroupId())) {
                         new AlertDialog.Builder(this)
                                 .setMessage("این تگ قبلاً به گروه «" + existing.getName()
-                                        + "» وصل است. می‌خواهید از آنجا جدا و به اینجا اضافه شود؟")
+                                        + "» وصل است. از آنجا جدا و به اینجا اضافه شود؟")
                                 .setPositiveButton("بله", (d2, w2) -> {
                                     existing.removeTagId(newId);
                                     dbManager.saveTag(existing);
@@ -208,25 +203,21 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         Toast.makeText(this, "تگ جدید اضافه شد", Toast.LENGTH_SHORT).show();
     }
 
-    /**
-     * Called from MainActivity when user scans a tag that has no group —
-     * offer to link it to an existing group instead of creating a new one.
-     */
     public static void offerLinkToExistingGroup(android.content.Context ctx,
-                                                 String newTagId,
-                                                 DatabaseManager db,
-                                                 Runnable onCreateNew) {
+                                                  String newTagId,
+                                                  DatabaseManager db,
+                                                  Runnable onCreateNew) {
         List<NfcTag> all = db.loadAllTags();
         if (all.isEmpty()) { onCreateNew.run(); return; }
 
         String[] names = new String[all.size() + 1];
         for (int i = 0; i < all.size(); i++)
-            names[i] = all.get(i).getName() != null ? all.get(i).getName() : "بدون نام";
+            names[i] = (all.get(i).getName() != null ? all.get(i).getName() : "بدون نام");
         names[all.size()] = "➕  ایجاد گروه جدید";
 
         new AlertDialog.Builder(ctx)
-                .setTitle("تگ جدید — اتصال به کجا؟")
-                .setMessage("این تگ جدید است. می‌خواهید به گروه موجود اضافه شود یا گروه جدید بسازید؟")
+                .setTitle("تگ جدید — کجا اضافه شود؟")
+                .setMessage("این تگ قبلاً ثبت نشده. به گروه موجود اضافه شود یا گروه جدید بسازید؟")
                 .setItems(names, (d, which) -> {
                     if (which == all.size()) {
                         onCreateNew.run();
@@ -234,7 +225,6 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
                         NfcTag chosen = all.get(which);
                         chosen.addTagId(newTagId);
                         db.saveTag(chosen);
-                        // Open the chosen group
                         Intent intent = new Intent(ctx, TagDetailActivity.class);
                         intent.putExtra(EXTRA_GROUP_ID, chosen.getGroupId());
                         intent.putExtra(EXTRA_IS_NEW, false);
@@ -256,7 +246,7 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
         }
         String[] arr = ids.toArray(new String[0]);
         new AlertDialog.Builder(this)
-                .setTitle("حذف تگ")
+                .setTitle("کدام تگ حذف شود؟")
                 .setItems(arr, (d, which) -> {
                     String toRemove = arr[which];
                     new AlertDialog.Builder(this)
@@ -279,9 +269,8 @@ public class TagDetailActivity extends AppCompatActivity implements RecordAdapte
             return;
         }
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < ids.size(); i++) {
+        for (int i = 0; i < ids.size(); i++)
             sb.append(i + 1).append(". ").append(ids.get(i)).append("\n");
-        }
         new AlertDialog.Builder(this)
                 .setTitle("تگ‌های مرتبط (" + ids.size() + " عدد)")
                 .setMessage(sb.toString().trim())
