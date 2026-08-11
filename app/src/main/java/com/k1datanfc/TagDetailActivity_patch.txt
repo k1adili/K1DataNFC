@@ -1,0 +1,10 @@
+FIND:
+        new AlertDialog.Builder(ctx)
+                .setTitle("تگ جدید — کجا اضافه شود؟")
+                .setMessage("این تگ قبلاً ثبت نشده. به گروه موجود اضافه شود یا گروه جدید بسازید؟")
+                .setItems(names, (d, which) -> {
+
+REPLACE WITH:
+        new AlertDialog.Builder(ctx)
+                .setTitle("تگ جدید — کجا اضافه شود؟")
+                .setItems(names, (d, which) -> {
