@@ -27,10 +27,7 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
-        <!-- PIN Lock — LAUNCHER -->
-        <activity
-            android:name=".PinActivity"
-            android:exported="true"
+        <activity android:name=".PinActivity" android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -38,10 +35,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Main tag list + NFC dispatch -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="false"
+        <activity android:name=".MainActivity" android:exported="false"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
@@ -55,34 +49,25 @@
                 <action android:name="android.nfc.action.TECH_DISCOVERED" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-            <meta-data
-                android:name="android.nfc.action.TECH_DISCOVERED"
+            <meta-data android:name="android.nfc.action.TECH_DISCOVERED"
                 android:resource="@xml/nfc_tech_filter" />
         </activity>
 
-        <!-- Tag detail (name + records timeline) -->
-        <activity
-            android:name=".TagDetailActivity"
-            android:exported="false"
+        <activity android:name=".TagDetailActivity" android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Record add/edit -->
-        <activity
-            android:name=".RecordEditActivity"
-            android:exported="false"
+        <activity android:name=".RecordEditActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize"
             android:parentActivityName=".TagDetailActivity" />
 
-        <!-- Backup -->
-        <activity
-            android:name=".BackupActivity"
-            android:exported="false"
+        <activity android:name=".FullScreenImageActivity" android:exported="false"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:parentActivityName=".RecordEditActivity" />
+
+        <activity android:name=".BackupActivity" android:exported="false"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Settings -->
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
+        <activity android:name=".SettingsActivity" android:exported="false"
             android:parentActivityName=".MainActivity" />
 
         <provider
@@ -90,8 +75,7 @@
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
 
