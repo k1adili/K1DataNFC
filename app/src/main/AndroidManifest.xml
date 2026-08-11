@@ -61,7 +61,7 @@
             android:parentActivityName=".TagDetailActivity" />
 
         <activity android:name=".FullScreenImageActivity" android:exported="false"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen"
+            android:theme="@style/Theme.K1DataNFC"
             android:parentActivityName=".RecordEditActivity" />
 
         <activity android:name=".BackupActivity" android:exported="false"
