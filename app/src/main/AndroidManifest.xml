@@ -27,10 +27,10 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
-        <!-- PIN Lock — LAUNCHER -->
         <activity
             android:name=".PinActivity"
             android:exported="true"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -38,10 +38,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Main tag list + NFC dispatch -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
@@ -60,30 +60,46 @@
                 android:resource="@xml/nfc_tech_filter" />
         </activity>
 
-        <!-- Tag detail (name + records timeline) -->
         <activity
             android:name=".TagDetailActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Record add/edit -->
         <activity
             android:name=".RecordEditActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"
             android:parentActivityName=".TagDetailActivity" />
 
-        <!-- Backup -->
+        <activity
+            android:name=".FullScreenImageActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.K1DataNFC"
+            android:parentActivityName=".RecordEditActivity" />
+
         <activity
             android:name=".BackupActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
 
-        <!-- Settings -->
         <activity
             android:name=".SettingsActivity"
             android:exported="false"
+            android:screenOrientation="portrait"
             android:parentActivityName=".MainActivity" />
+
+        <!--
+            ZXing scanner activity — force portrait so rotating the phone
+            after a scan does NOT destroy our dialog.
+        -->
+        <activity
+            android:name="com.journeyapps.barcodescanner.CaptureActivity"
+            android:screenOrientation="portrait"
+            tools:replace="screenOrientation" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
