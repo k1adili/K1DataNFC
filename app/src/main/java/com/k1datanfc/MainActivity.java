@@ -238,7 +238,7 @@ public class MainActivity extends AppCompatActivity implements TagListAdapter.Ta
                 .setCameraId(0)
                 .setBeepEnabled(true)
                 .setBarcodeImageEnabled(false)
-                .setOrientationLocked(false);
+                .setOrientationLocked(true);
         qrLauncher.launch(opts);
     }
 
